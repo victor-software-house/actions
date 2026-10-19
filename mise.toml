@@ -1,0 +1,23 @@
+min_version = "2026.10.9"
+
+[settings]
+lockfile = true
+# The platforms CI and contributors use.
+lockfile_platforms = ["linux-x64", "macos-arm64"]
+
+# Every tool must match mise.lock.
+[tool_config]
+locked = true
+
+[tools]
+actionlint = "1.7.12"
+# check:catalog reads the TOML catalogs as JSON.
+yq = "4.54.1"
+
+# mise-tasks/ holds this repository's own checks, named by their paths.
+[task_config]
+includes = ["mise-tasks"]
+
+[tasks.verify]
+description = "Every check CI runs"
+depends = ["lint:workflows", "check:pins", "check:catalog"]
