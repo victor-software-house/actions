@@ -61,8 +61,13 @@ jobs:
 
 The job runs on `ubuntu-latest` for a public repository and on the Namespace
 runner for a private one, read from the calling repository's visibility.
-It checks out the repository, installs the locked tools with mise, restores
-the mbx build cache, and runs `mise run verify` with `MISE_ENV=ci`.
+It checks out the repository with its submodules, installs the locked tools
+with mise, restores mbx's compiled objects, and runs `mise run verify` with
+`MISE_ENV=ci` and git's first branch set to `main`.
+The mise install cache is on for GitHub-hosted runners and off on Namespace,
+where a restored cache lacks rustup's components.
+A step the workflow does not run, such as a release build, goes in a job of
+the calling workflow beside the call.
 
 | Input | Default | Effect |
 |:--|:--|:--|
