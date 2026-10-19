@@ -70,6 +70,22 @@ run = [
   "cargo-machete --with-metadata",
 ]
 
+# A manifest version changes only on the Version PR, through a fragment.
+# The release config is what declares releases, so a repository without one
+# has no version to compare, and needs neither the `ver` task nor verctl. A
+# repository with one includes verctl's `ver` task beside this catalog, and
+# sets VERCTL_CONFIG when the config sits outside its mise.toml directory.
+["check:versions"]
+description = "Manifest versions match the default branch outside a Version PR"
+run = '''
+config="${VERCTL_CONFIG:-.ctl/ver.yaml}"
+if [ ! -f "$config" ]; then
+  echo "no $config: this repository declares no releases, nothing to compare"
+  exit 0
+fi
+mise run ver check --versions
+'''
+
 # Published crates only. CI runs it before packaging; it compares against the
 # release on crates.io.
 [semver]
