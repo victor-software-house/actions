@@ -11,7 +11,7 @@ only the line that pins it.
 |:--|:--|
 | `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `semver`, and `doc` |
 | `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
-| `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it |
+| `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: one `Template` job that runs `template:check` with a token that reads the template |
 
 ## Use the Rust catalog
@@ -119,6 +119,32 @@ GitHub App, with the client ID in the organization variable
 It passes the token only to the step that runs `template:check`.
 It takes `working-directory` for a template rendered below the repository
 root, and skips a pull request from a fork, which gets no secrets.
+
+## Turn a template piece off or on
+
+The template answers `pieces` and `pieces_extra` list the pieces it manages.
+A plain `copier update --data` that drops a piece deletes the piece's files,
+edited or not, so change the lists through these tasks:
+
+```sh
+mise run template:off deny
+mise run template:on deny
+```
+
+`template:off` renders the recorded template version with and without the
+pieces, and takes the files that disappear.
+It then runs `copier update --vcs-ref=:current:` without the pieces and with
+one `--exclude` for each of those files.
+The repository keeps its copies and owns them from then on: later updates
+leave them alone, and it may edit or delete them.
+A piece that builds on one being turned off is named too, as in
+`template:off rust_tasks machete doc_tests rustdoc`; otherwise copier's
+validator names the rule, and nothing changes.
+
+`template:on` adds the pieces to the list the template's questions put them
+in, and runs `copier update --vcs-ref=:current:`.
+A file the repository kept comes back with inline conflict markers between
+its copy and the template's; the task fails and `git diff --check` lists them.
 
 ## Releases
 
