@@ -9,7 +9,7 @@ only the line that pins it.
 
 | Path | Holds |
 |:--|:--|
-| `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `semver`, and `doc` |
+| `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `check:versions`, `semver`, and `doc` |
 | `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: one `Template` job that runs `template:check` with a token that reads the template |
@@ -45,6 +45,11 @@ unset.
 `doc` runs `cargo +$RUST_NIGHTLY doc --no-deps --all-features --locked` with
 `RUSTDOCFLAGS="--cfg docsrs -D warnings"`, so a rustdoc warning fails it before
 docs.rs sees it.
+`check:versions` fails when a manifest version changed outside a Version PR.
+It passes with a notice when the repository has no `.ctl/ver.yaml` and
+`VERCTL_CONFIG` is unset, and fails when `VERCTL_CONFIG` names no file.
+A repository that declares releases includes verctl's `ver` task, which it
+calls.
 An inline `[tasks.<name>]` in `mise.toml` replaces a catalog task of the same
 name.
 
@@ -160,4 +165,4 @@ Pin the commit a tag names, with the tag as a comment.
 |:--|:--|
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
-| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.20's catalog, apart from `format`, the `test` command, and the added `doc`, and names no toolchain version |
+| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.20's catalog, apart from `format`, the `test` command, and the added `doc`; `check:versions` equals ctl-core v0.6.28's apart from its `VERCTL_CONFIG` guard; the catalog names no toolchain version |
