@@ -74,10 +74,16 @@ run = [
 # The release config is what declares releases, so a repository without one
 # has no version to compare, and needs neither the `ver` task nor verctl. A
 # repository with one includes verctl's `ver` task beside this catalog, and
-# sets VERCTL_CONFIG when the config sits outside its mise.toml directory.
+# sets VERCTL_CONFIG when the config sits outside its mise.toml directory. A
+# VERCTL_CONFIG that names no file fails, so a wrong path never turns the
+# check off.
 ["check:versions"]
 description = "Manifest versions match the default branch outside a Version PR"
 run = '''
+if [ -n "${VERCTL_CONFIG:-}" ] && [ ! -f "$VERCTL_CONFIG" ]; then
+  echo "VERCTL_CONFIG=$VERCTL_CONFIG names no file" >&2
+  exit 1
+fi
 config="${VERCTL_CONFIG:-.ctl/ver.yaml}"
 if [ ! -f "$config" ]; then
   echo "no $config: this repository declares no releases, nothing to compare"

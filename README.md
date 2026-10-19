@@ -46,9 +46,10 @@ unset.
 `RUSTDOCFLAGS="--cfg docsrs -D warnings"`, so a rustdoc warning fails it before
 docs.rs sees it.
 `check:versions` fails when a manifest version changed outside a Version PR.
-It passes with a notice when the repository has no `.ctl/ver.yaml`, or no
-file at `VERCTL_CONFIG`; a repository that declares releases includes
-verctl's `ver` task, which it calls.
+It passes with a notice when the repository has no `.ctl/ver.yaml` and
+`VERCTL_CONFIG` is unset, and fails when `VERCTL_CONFIG` names no file.
+A repository that declares releases includes verctl's `ver` task, which it
+calls.
 An inline `[tasks.<name>]` in `mise.toml` replaces a catalog task of the same
 name.
 
@@ -164,4 +165,4 @@ Pin the commit a tag names, with the tag as a comment.
 |:--|:--|
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
-| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.20's catalog, apart from `format`, the `test` command, and the added `doc`; `check:versions` equals ctl-core v0.6.28's; the catalog names no toolchain version |
+| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.20's catalog, apart from `format`, the `test` command, and the added `doc`; `check:versions` equals ctl-core v0.6.28's apart from its `VERCTL_CONFIG` guard; the catalog names no toolchain version |
