@@ -1,0 +1,84 @@
+# The standard Rust tasks, identical in every repository that includes them.
+# Include this file by commit, after mise-tasks:
+#
+#   [settings]
+#   experimental = true  # mise loads git:: task includes only with this on
+#
+#   [task_config]
+#   includes = [
+#     "mise-tasks",
+#     "git::https://github.com/victor-software-house/actions.git//tasks/rust.toml?ref=<commit>",
+#   ]
+#
+# The catalog names no toolchain version. The including repository sets them
+# in its mise.toml [env]: RUSTFMT_TOOLCHAIN ("+nightly-YYYY-MM-DD") when format
+# runs on a nightly for rustfmt's unstable options, and RUST_NIGHTLY, the
+# nightly doc builds on as docs.rs does. Its mise.toml pins the tools these
+# tasks call, and defines verify from the tasks it wants, beside its own
+# check:features and check:repo.
+# Every task that resolves dependencies passes --locked, so a Cargo.lock that
+# no longer matches Cargo.toml fails verify here, as it fails a release build
+# that passes --locked.
+["check:toolchain"]
+description = "mise.toml, rust-toolchain.toml, and rust-version pin the same stable"
+# pipefail: a failing cargo metadata or jq must fail the task, not pass it.
+shell = "bash -o pipefail -c"
+run = [
+  '[ "$(rustc -V)" = "$(env -u RUSTUP_TOOLCHAIN RUSTUP_AUTO_INSTALL=0 rustc -V)" ] || { echo "✘ mise.toml and rust-toolchain.toml pin different toolchains"; exit 1; }',
+  '''cargo metadata --no-deps --locked --format-version 1 | jq --arg v "$(rustc -V | cut -d' ' -f2)" '[.packages[] | select(.rust_version != $v) | .name] | if length > 0 then error("✘ rust-version differs from the pinned stable in: \(join(", "))") else empty end' ''',
+]
+
+[format]
+description = "rustfmt check, on RUSTFMT_TOOLCHAIN when set"
+run = "cargo ${RUSTFMT_TOOLCHAIN:-} fmt --all -- --check"
+
+[lint]
+description = "clippy -D warnings"
+run = "cargo clippy --locked --all-targets --all-features -- -D warnings"
+
+[test]
+description = "Unit and integration tests"
+# --tests selects every target whose `test` flag is on, bins included. --bins
+# would select every bin regardless of the flag, so a fuzz target with
+# `test = false` would build and run as a test.
+run = "cargo test --locked --all-features --lib --tests"
+# Stops a hung test run instead of holding the gate. The limit also counts
+# compile time and waits on the target/ lock, so it sits far above a cold build.
+timeout = "30m"
+
+["test:doc"]
+description = "Doc-tests"
+run = "cargo test --locked --doc --all-features"
+timeout = "30m"
+
+[deny]
+description = "License, ban, and source policy (offline)"
+run = "cargo deny --locked check licenses bans sources"
+
+["deny:advisories"]
+description = "RustSec advisories and yanked crates (network)"
+run = "cargo deny --locked check advisories"
+
+[deps]
+description = "Unused crate analysis"
+# cargo-machete calls cargo metadata without --locked, which would rewrite a
+# stale Cargo.lock while sibling tasks run. The locked metadata call fails
+# first, so no task in verify ever writes the lock.
+run = [
+  "cargo metadata --locked --format-version 1 > /dev/null",
+  "cargo-machete --with-metadata",
+]
+
+# Published crates only. CI runs it before packaging; it compares against the
+# release on crates.io.
+[semver]
+description = "Public API changes against the last release (network)"
+run = "cargo semver-checks"
+
+# Builds the docs as docs.rs does: on a nightly, with --cfg docsrs, and with
+# every rustdoc warning denied. The [lints.rustdoc] lints fire only here;
+# test:doc runs the doc-tests and not them.
+[doc]
+description = "rustdoc as docs.rs builds it, warnings denied"
+run = 'cargo +${RUST_NIGHTLY} doc --no-deps --all-features --locked'
+env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", CARGO_TARGET_DIR = "target/rustdoc" }
