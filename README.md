@@ -11,6 +11,8 @@ only the line that pins it.
 |:--|:--|
 | `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `semver`, and `doc` |
 | `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
+| `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it |
+| `.github/workflows/template-check.yml` | The reusable drift check: one `Template` job that runs `template:check` with a token that reads the template |
 
 ## Use the Rust catalog
 
@@ -76,6 +78,47 @@ the calling workflow beside the call.
 | `advisories` | `true` | Runs `mise run deny:advisories` after `verify` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify` job |
+
+## Check the template version
+
+Include the template catalog by commit, beside the Rust catalog:
+
+```toml
+[task_config]
+includes = [
+  "mise-tasks",
+  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=<commit>",
+]
+```
+
+`mise run template:check` reads `_src_path` and `_commit` from
+`.copier-answers.yml`, runs `copier update` to the template's newest `vX.Y.Z`
+tag, and fails when that changes any file besides the answers file.
+A newer tag that renders no change passes with a notice.
+Copier runs through `uvx`, at the version the template pins as
+`"pypi:copier"` in its own `mise.toml` at that tag.
+The task declares uv and python in its `tools` table, and `mise lock` records
+them in the repository's lock.
+
+The CI job calls the drift-check workflow by commit and passes the
+organization's secrets:
+
+```yaml
+jobs:
+  template:
+    uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # <tag>
+    with:
+      mise-version: 2026.10.9
+    secrets: inherit
+```
+
+The workflow mints a read-only token for the template repository from a
+GitHub App, with the client ID in the organization variable
+`TEMPLATES_APP_CLIENT_ID` and the key in the organization secret
+`TEMPLATES_APP_PRIVATE_KEY`.
+It passes the token only to the step that runs `template:check`.
+It takes `working-directory` for a template rendered below the repository
+root, and skips a pull request from a fork, which gets no secrets.
 
 ## Releases
 
