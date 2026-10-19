@@ -1,0 +1,105 @@
+# The reusable Rust CI workflow. A caller's ci.yml holds only the job that
+# calls it, by commit:
+#
+#   jobs:
+#     verify:
+#       uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
+#       with:
+#         mise-version: <mise version>
+#
+# The github context here is the caller's, so the runner follows the caller's
+# visibility: GitHub-hosted for a public repository, free there and measured
+# faster for these crates, and the Namespace runner for a private one.
+name: Rust CI
+
+on:
+  workflow_call:
+    inputs:
+      mise-version:
+        description: The mise release to install
+        type: string
+        required: true
+      working-directory:
+        description: The directory that holds the crate's mise.toml
+        type: string
+        default: .
+      advisories:
+        description: Run deny:advisories after verify
+        type: boolean
+        default: true
+      semver:
+        description: Run semver and cargo package, for a published crate
+        type: boolean
+        default: false
+      timeout-minutes:
+        description: Cancels a hung Verify job
+        type: number
+        default: 8
+
+permissions:
+  contents: read
+
+env:
+  # Tests that create git repositories get main as their first branch,
+  # whatever the runner image's git defaults to.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+  # The CI profile; local work loads dev from .miserc.toml, which CI never does.
+  MISE_ENV: ci
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      # A check:versions task reads a pull request that changes a manifest
+      # version, to tell the Version PR apart from a hand edit.
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # A crate's test fixtures may live in a submodule; with none, this
+          # checks out nothing more.
+          submodules: true
+      # The mise cache stays off on Namespace: a restored cache keeps mise's
+      # Rust record without rustup's components, and every Namespace runner
+      # starts empty.
+      - name: Install locked toolchain
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache: ${{ !github.event.repository.private }}
+      # The objects payload carries mbx's compiled actions, whatever Cargo's
+      # target layout; a restored target tree still recompiled most of the
+      # clippy, doc-test, and cargo-semver-checks work.
+      - name: Cache builds with mbx
+        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          github-cache-mode: objects
+          isolate-objects-cache: true
+      - name: Verify
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: mise run verify
+      - name: Advisories
+        if: inputs.advisories
+        run: mise run deny:advisories
+      # Compares the public API with the last release on crates.io.
+      - name: Semver
+        if: inputs.semver
+        run: mise run semver
+      # --workspace packages every member of a workspace, and the one package
+      # of a single crate.
+      - name: Package
+        if: inputs.semver
+        run: mise x -- cargo package --locked --all-features --workspace

@@ -10,6 +10,7 @@ only the line that pins it.
 | Path | Holds |
 |:--|:--|
 | `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `semver`, and `doc` |
+| `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
 
 ## Use the Rust catalog
 
@@ -44,6 +45,37 @@ unset.
 docs.rs sees it.
 An inline `[tasks.<name>]` in `mise.toml` replaces a catalog task of the same
 name.
+
+## Call the Rust CI workflow
+
+A repository's `ci.yml` calls the workflow by commit, with the mise release it
+pins:
+
+```yaml
+jobs:
+  verify:
+    uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
+    with:
+      mise-version: 2026.10.9
+```
+
+The job runs on `ubuntu-latest` for a public repository and on the Namespace
+runner for a private one, read from the calling repository's visibility.
+It checks out the repository with its submodules, installs the locked tools
+with mise, restores mbx's compiled objects, and runs `mise run verify` with
+`MISE_ENV=ci` and git's first branch set to `main`.
+The mise install cache is on for GitHub-hosted runners and off on Namespace,
+where a restored cache lacks rustup's components.
+A step the workflow does not run, such as a release build, goes in a job of
+the calling workflow beside the call.
+
+| Input | Default | Effect |
+|:--|:--|:--|
+| `mise-version` | required | The mise release to install |
+| `working-directory` | `.` | The directory that holds the crate's `mise.toml` |
+| `advisories` | `true` | Runs `mise run deny:advisories` after `verify` |
+| `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
+| `timeout-minutes` | `8` | Cancels a hung `Verify` job |
 
 ## Releases
 
