@@ -160,4 +160,4 @@ Pin the commit a tag names, with the tag as a comment.
 |:--|:--|
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
-| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.20's catalog, apart from `format` and the added `doc`, and names no toolchain version |
+| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.20's catalog, apart from `format`, the `test` command, and the added `doc`, and names no toolchain version |
