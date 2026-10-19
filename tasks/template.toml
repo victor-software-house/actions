@@ -58,3 +58,101 @@ else
   echo "::notice::Template $latest renders no change here; the repository records $current."
 fi
 '''
+
+["template:off"]
+description = "Turns template pieces off and keeps their files, edited or not"
+usage = 'arg "<piece>" var=#true help="A piece to turn off, from the pieces or pieces_extra answer"'
+tools = { uv = "0.13.1", python = "3.14.8", yq = "4.54.1" }
+shell = "bash -c"
+# A plain copier update that drops a piece deletes the piece's files. This
+# task finds those files by rendering the recorded template version with and
+# without the pieces, then updates with one --exclude for each, so copier
+# leaves them alone now and on every later update. A piece that builds on one
+# being turned off must be named too; copier's validator names it otherwise.
+run = '''
+set -euo pipefail
+answers=.copier-answers.yml
+read -ra off <<<"$usage_piece"
+for piece in "${off[@]}"; do
+  if ! yq -e "(.pieces // []) + (.pieces_extra // []) | contains([\"$piece\"])" "$answers" >/dev/null 2>&1; then
+    echo "template:off: $piece is not on in $answers" >&2
+    exit 1
+  fi
+done
+src=$(yq '._src_path' "$answers")
+commit=$(yq '._commit' "$answers")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+git clone --quiet --filter=blob:none "$src" "$work/template"
+copier=$(git -C "$work/template" show "$commit:mise.toml" | sed -n 's/^"pypi:copier" = "\(.*\)"$/\1/p')
+list=$(printf '"%s",' "${off[@]}")
+yq 'with_entries(select(.key | test("^_") | not))' "$answers" >"$work/on.yml"
+yq ".pieces = ((.pieces // []) - [${list%,}]) | .pieces_extra = ((.pieces_extra // []) - [${list%,}])" "$work/on.yml" >"$work/off.yml"
+files() {
+  (cd "$1" && find . -type f ! -name .copier-answers.yml | sed 's|^\./||' | sort)
+}
+for side in on off; do
+  # A dependent piece left on fails copier's choice validator, before any file
+  # here changes; its last line names the piece's rule.
+  if ! uvx "copier@$copier" copy --quiet --defaults --vcs-ref "$commit" --data-file "$work/$side.yml" "$work/template" "$work/$side" 2>"$work/err"; then
+    tail -n 1 "$work/err" >&2
+    echo "template:off: nothing changed; name every piece that builds on ${off[*]} too" >&2
+    exit 1
+  fi
+done
+paths=()
+excludes=()
+while IFS= read -r path; do
+  paths+=("$path")
+  # A leading slash anchors the pattern to the repository root.
+  excludes+=(--exclude "/$path")
+done < <(comm -23 <(files "$work/on") <(files "$work/off"))
+uvx "copier@$copier" update --quiet --defaults --vcs-ref=:current: \
+  --data "pieces=$(yq -o json -I0 '.pieces // []' "$work/off.yml")" \
+  --data "pieces_extra=$(yq -o json -I0 '.pieces_extra // []' "$work/off.yml")" \
+  ${excludes[@]+"${excludes[@]}"}
+echo "Turned off ${off[*]}. The repository now owns these files, which the template no longer manages:"
+printf '%s\n' ${paths[@]+"${paths[@]}"}
+'''
+
+["template:on"]
+description = "Turns template pieces on, with conflict markers where the repository keeps its own file"
+usage = 'arg "<piece>" var=#true help="A piece to turn on, from the choices of the pieces or pieces_extra question"'
+tools = { uv = "0.13.1", python = "3.14.8", yq = "4.54.1" }
+shell = "bash -c"
+# copier update renders the pieces' files over the repository's. A file the
+# repository kept after template:off comes back with inline conflict markers
+# between its copy and the template's, which git diff --check reports.
+run = '''
+set -euo pipefail
+answers=.copier-answers.yml
+read -ra on <<<"$usage_piece"
+src=$(yq '._src_path' "$answers")
+commit=$(yq '._commit' "$answers")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+git clone --quiet --filter=blob:none "$src" "$work/template"
+copier=$(git -C "$work/template" show "$commit:mise.toml" | sed -n 's/^"pypi:copier" = "\(.*\)"$/\1/p')
+# The template's own questions say which list each piece belongs to.
+git -C "$work/template" show "$commit:copier.yml" >"$work/copier.yml"
+cp "$answers" "$work/answers.yml"
+for piece in "${on[@]}"; do
+  if yq -e ".pieces.choices[] | (.value // .) | select(. == \"$piece\")" "$work/copier.yml" >/dev/null 2>&1; then
+    key=pieces
+  elif yq -e ".pieces_extra.choices[] | (.value // .) | select(. == \"$piece\")" "$work/copier.yml" >/dev/null 2>&1; then
+    key=pieces_extra
+  else
+    echo "template:on: the template at $commit has no piece $piece" >&2
+    exit 1
+  fi
+  yq -i ".$key = (((.$key // []) + [\"$piece\"]) | unique)" "$work/answers.yml"
+done
+uvx "copier@$copier" update --quiet --defaults --vcs-ref=:current: \
+  --data "pieces=$(yq -o json -I0 '.pieces // []' "$work/answers.yml")" \
+  --data "pieces_extra=$(yq -o json -I0 '.pieces_extra // []' "$work/answers.yml")"
+if ! git diff --check; then
+  echo "template:on: resolve the conflict markers above, where the repository kept its own file" >&2
+  exit 1
+fi
+echo "Turned on ${on[*]}."
+'''
