@@ -136,7 +136,9 @@ jobs:
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ steps.app.outputs.token }}@github.com/${{ steps.template.outputs.owner }}/${{ steps.template.outputs.name }}.insteadOf
           GIT_CONFIG_VALUE_0: ${{ steps.template.outputs.url }}
           TEMPLATE_DRIFT: ${{ steps.drift.outputs.mode }}
-        run: mise run --skip-tools template:check
+        # A Bun project's [deps.bun] would run bun install first, and the
+        # check installs no bun.
+        run: mise run --skip-tools --no-deps template:check
       # template:check left the newest tag's update in the working tree, so
       # the files it changes are the drift.
       - name: Report drift in an issue
