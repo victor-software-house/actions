@@ -112,8 +112,11 @@ mise run ver semver
 '''
 
 # Builds the docs as docs.rs does: on a nightly, with --cfg docsrs, and with
-# every rustdoc warning denied. The [lints.rustdoc] lints fire only here;
-# test:doc runs the doc-tests and not them.
+# every rustdoc warning denied. It always builds every feature, even for a
+# crate whose docs.rs metadata lists fewer: features are additive, so this
+# checks every gated item docs.rs could render, and lint and test compile the
+# same set. The [lints.rustdoc] lints fire only here; test:doc runs the
+# doc-tests and not them.
 [doc]
 description = "rustdoc as docs.rs builds it, warnings denied"
 run = 'cargo +${RUST_NIGHTLY} doc --no-deps --all-features --locked'

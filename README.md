@@ -45,6 +45,8 @@ unset.
 `doc` runs `cargo +$RUST_NIGHTLY doc --no-deps --all-features --locked` with
 `RUSTDOCFLAGS="--cfg docsrs -D warnings"`, so a rustdoc warning fails it before
 docs.rs sees it.
+It builds every feature even when a crate's docs.rs metadata lists fewer, so it
+checks every gated item docs.rs could render.
 `check:docs` checks what `doc` cannot see, for a repository that publishes.
 Every library cargo would publish sets `rustdoc-args = ["--cap-lints", "warn"]`
 in `[package.metadata.docs.rs]`, and chooses what docs.rs builds:
