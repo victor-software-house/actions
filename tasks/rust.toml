@@ -34,7 +34,10 @@ run = "cargo ${RUSTFMT_TOOLCHAIN:-} fmt --all -- --check"
 
 [lint]
 description = "clippy -D warnings"
-run = "cargo clippy --locked --all-targets --all-features -- -D warnings"
+# --workspace in lint, test, and test:doc: without it cargo selects the
+# default members, which is only the root package of a workspace with one, or
+# the default-members list, so the other members would go unchecked.
+run = "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
 
 [test]
 description = "Unit and integration tests"
@@ -42,14 +45,14 @@ description = "Unit and integration tests"
 # integration tests. --lib adds nothing and fails a crate with no library.
 # --bins would select every bin regardless of the flag, so a fuzz target with
 # `test = false` would build and run as a test.
-run = "cargo test --locked --all-features --tests"
+run = "cargo test --locked --workspace --all-features --tests"
 # Stops a hung test run instead of holding the gate. The limit also counts
 # compile time and waits on the target/ lock, so it sits far above a cold build.
 timeout = "30m"
 
 ["test:doc"]
 description = "Doc-tests"
-run = "cargo test --locked --doc --all-features"
+run = "cargo test --locked --workspace --doc --all-features"
 timeout = "30m"
 
 [deny]
@@ -93,10 +96,12 @@ mise run ver check --versions
 '''
 
 # Published crates only. CI runs it before packaging; it compares against the
-# release on crates.io.
+# release on crates.io, at the release type the pending fragments allow, so a
+# break fails unless a fragment already bumps the minor. It runs verctl's
+# `ver` task, which a published crate includes beside this catalog.
 [semver]
 description = "Public API changes against the last release (network)"
-run = "cargo semver-checks"
+run = "mise run ver semver"
 
 # Builds the docs as docs.rs does: on a nightly, with --cfg docsrs, and with
 # every rustdoc warning denied. The [lints.rustdoc] lints fire only here;
