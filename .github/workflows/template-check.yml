@@ -1,15 +1,31 @@
-# The reusable drift check. A caller's workflow holds only the job that calls
-# it, by commit, and passes the organization's secrets:
+# The reusable drift check. A caller's workflow runs on pull requests, on
+# pushes to the default branch, and on a daily schedule, and holds only the
+# job that calls this one, by commit, with the organization's secrets:
 #
+#   on:
+#     pull_request:
+#     push:
+#       branches: [main]
+#     schedule:
+#       - cron: "17 9 * * *"
 #   jobs:
 #     template:
 #       uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # <tag>
+#       permissions:
+#         contents: read
+#         issues: write
 #       with:
 #         mise-version: <mise version>
 #       secrets: inherit
 #
 # The caller includes tasks/template.toml, whose template:check does the work,
 # so a developer runs the same check with `mise run template:check`.
+#
+# Only an update pull request, one that changes .copier-answers.yml, fails on
+# drift: it must reach the newest tag. Any other pull request reports a newer
+# tag as a notice, so a new tag fails no unrelated pull request. A push or a
+# scheduled run keeps one open issue per working directory while the newest
+# tag would change the repository, and closes it once nothing is left to take.
 name: Template check
 
 on:
@@ -37,6 +53,14 @@ jobs:
     # A pull request from a fork gets no secrets and cannot read the template,
     # so the check is skipped there instead of failing.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      # The drift issue, written only outside pull requests.
+      issues: write
+    # Runs outside pull requests take turns, so two of them never open two
+    # issues. Each pull request run has a group of its own.
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && format('template-{0}', github.run_id) || format('template-report-{0}', inputs.working-directory) }}
     runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
     defaults:
       run:
@@ -48,6 +72,19 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # A pull request checks out its merge commit; its first parent is
+          # the base branch, which the next step diffs against.
+          fetch-depth: 2
+      - name: Choose how drift reports
+        id: drift
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ] && ! git diff --quiet HEAD^1 HEAD -- .copier-answers.yml; then
+            echo "mode=fail" >>"$GITHUB_OUTPUT"
+          else
+            echo "mode=notice" >>"$GITHUB_OUTPUT"
+          fi
       # The answers file names the template, so this workflow names none.
       - name: Find the template
         id: template
@@ -95,4 +132,44 @@ jobs:
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ steps.app.outputs.token }}@github.com/${{ steps.template.outputs.owner }}/${{ steps.template.outputs.name }}.insteadOf
           GIT_CONFIG_VALUE_0: ${{ steps.template.outputs.url }}
+          TEMPLATE_DRIFT: ${{ steps.drift.outputs.mode }}
         run: mise run --skip-tools template:check
+      # template:check left the newest tag's update in the working tree, so
+      # the files it changes are the drift.
+      - name: Report drift in an issue
+        if: github.event_name != 'pull_request' && github.event.repository.has_issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DIRECTORY: ${{ inputs.working-directory }}
+        run: |
+          title="Template update available"
+          if [ "$DIRECTORY" != . ]; then
+            title="$title in $DIRECTORY"
+          fi
+          issue=$(gh issue list --state open --limit 500 --json number,title | jq -r --arg title "$title" '[.[] | select(.title == $title) | .number][0] // empty')
+          latest=$(sed -n 's/^_commit: //p' .copier-answers.yml)
+          current=$(git show HEAD:./.copier-answers.yml | sed -n 's/^_commit: //p')
+          changes=$(git status --short --untracked-files=all -- . ":(exclude).copier-answers.yml")
+          if [ -z "$changes" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "Template $latest leaves nothing to update in $DIRECTORY."
+            fi
+            exit 0
+          fi
+          body=$(mktemp)
+          {
+            echo "Template $latest changes these files in \`$DIRECTORY\`, which records $current:"
+            echo
+            echo '```text'
+            echo "$changes"
+            echo '```'
+            echo
+            echo "Update in \`$DIRECTORY\` with \`copier update --defaults --vcs-ref $latest\` and open a pull request."
+            echo "This issue closes when a later check on the default branch finds nothing left to update."
+          } >"$body"
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file "$body"
+          else
+            gh issue create --title "$title" --body-file "$body"
+          fi
