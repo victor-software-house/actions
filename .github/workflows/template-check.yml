@@ -1,6 +1,6 @@
 # The reusable drift check. A caller's workflow runs on pull requests, on
 # pushes to the default branch, and on a daily schedule, and holds only the
-# job that calls this one, by commit, with the organization's secrets:
+# job that calls this one, by commit, passing the template-reader App's key:
 #
 #   on:
 #     pull_request:
@@ -16,7 +16,8 @@
 #         issues: write
 #       with:
 #         mise-version: <mise version>
-#       secrets: inherit
+#       secrets:
+#         TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 #
 # The caller includes tasks/template.toml, whose template:check does the work,
 # so a developer runs the same check with `mise run template:check`.
@@ -39,6 +40,10 @@ on:
         description: The directory that holds .copier-answers.yml and its mise.toml
         type: string
         default: .
+    secrets:
+      TEMPLATES_APP_PRIVATE_KEY:
+        description: The private key of the App that reads the template; its client id is the TEMPLATES_APP_CLIENT_ID variable
+        required: true
 
 permissions:
   contents: read
