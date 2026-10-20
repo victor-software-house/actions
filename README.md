@@ -105,22 +105,45 @@ includes = [
 `.copier-answers.yml`, runs `copier update` to the template's newest `vX.Y.Z`
 tag, and fails when that changes any file besides the answers file.
 A newer tag that renders no change passes with a notice.
+With `TEMPLATE_DRIFT=notice` a tag that changes files passes with a notice
+too, and leaves the update in the working tree.
 Copier runs through `uvx`, at the version the template pins as
 `"pypi:copier"` in its own `mise.toml` at that tag.
 The task declares uv and python in its `tools` table, and `mise lock` records
 them in the repository's lock.
 
-The CI job calls the drift-check workflow by commit and passes the
-organization's secrets:
+The CI workflow runs on pull requests, on pushes to the default branch, and
+daily, and calls the drift-check workflow by commit with the organization's
+secrets:
 
 ```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 9 * * *"
+
 jobs:
   template:
     uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # <tag>
+    permissions:
+      contents: read
+      issues: write
     with:
       mise-version: 2026.10.9
     secrets: inherit
 ```
+
+Only an update pull request, one that changes `.copier-answers.yml`, fails
+when the newest tag would change the repository.
+Every other pull request passes with a notice, so a new tag fails no
+unrelated pull request.
+A push or a scheduled run opens an issue titled "Template update available"
+(with " in <directory>" below the root) that lists the files the newest tag
+changes, updates it on later runs, and closes it once the repository is on
+a tag that leaves nothing to update.
+A repository with issues turned off gets the notice only.
 
 The workflow mints a read-only token for the template repository from a
 GitHub App, with the client ID in the organization variable
