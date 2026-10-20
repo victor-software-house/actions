@@ -45,10 +45,14 @@ unset.
 `doc` runs `cargo +$RUST_NIGHTLY doc --no-deps --all-features --locked` with
 `RUSTDOCFLAGS="--cfg docsrs -D warnings"`, so a rustdoc warning fails it before
 docs.rs sees it.
+It builds every feature even when a crate's docs.rs metadata lists fewer, so it
+checks every gated item docs.rs could render.
 `check:docs` checks what `doc` cannot see, for a repository that publishes.
-Every library cargo would publish sets `all-features = true` and
-`rustdoc-args = ["--cap-lints", "warn"]` in `[package.metadata.docs.rs]`.
-Every such library with features carries
+Every library cargo would publish sets `rustdoc-args = ["--cap-lints", "warn"]`
+in `[package.metadata.docs.rs]`, and chooses what docs.rs builds:
+`all-features = true`, or a `features` list when all features would build
+heavy dependencies that gate no documented item.
+Every such library with a feature besides `default` carries
 `#![cfg_attr(docsrs, feature(doc_cfg))]` at its crate root.
 No tracked Rust, TOML, or shell file, and no file in a mise file-task
 directory, names `clippy::missing_{errors,panics}_doc` or `clippy::pedantic` at any
