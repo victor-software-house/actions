@@ -156,7 +156,7 @@ git grep -n -E \
   -e "[[](workspace[.])?lints[.]clippy[.]pedantic[]]" \
   -- '*.rs' '*.toml' '*.sh' 'mise-tasks/**' '.mise-tasks/**' 'mise/tasks/**' '.mise/tasks/**' '.config/mise/tasks/**' || status=$?
 case $status in
-  0) echo "✘ clippy::missing_{errors,panics}_doc and the pedantic group must keep their default: name neither lint, and set pedantic only to warn or deny in [lints]"; exit 1 ;;
+  0) echo "✘ clippy::missing_{errors,panics}_doc and the pedantic group must keep their default: name neither lint, and set pedantic only to warn or deny as a key in [lints.clippy], not as a table of its own"; exit 1 ;;
   1) ;;
   *) exit "$status" ;;
 esac
