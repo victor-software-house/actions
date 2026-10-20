@@ -17,9 +17,21 @@ tools = { uv = "0.13.1", python = "3.14.8" }
 shell = "bash -c"
 # A newer tag that renders the same files passes with a notice: the
 # repository takes the new _commit with its next real template change.
+# TEMPLATE_DRIFT=notice reports a tag that changes the repository as a notice
+# instead of a failure, and leaves the update in the working tree. The shared
+# workflow sets it everywhere but on an update pull request, so a new tag
+# never fails an unrelated one.
 run = '''
 set -euo pipefail
 answers=.copier-answers.yml
+drift=${TEMPLATE_DRIFT:-fail}
+case "$drift" in
+  fail | notice) ;;
+  *)
+    echo "::error::TEMPLATE_DRIFT is $drift, expected fail or notice."
+    exit 1
+    ;;
+esac
 recorded() { sed -n 's/^_commit: //p' "$answers"; }
 
 current=$(recorded)
@@ -46,6 +58,11 @@ fi
 uvx "copier@$copier" update --quiet --defaults --vcs-ref "$tag"
 latest=$(recorded)
 changes=$(git status --porcelain --untracked-files=all -- . ":(exclude)$answers")
+if [ -n "$changes" ] && [ "$drift" = notice ]; then
+  echo "::notice::Template $latest changes this repository, which records $current."
+  git status --short -- . ":(exclude)$answers"
+  exit 0
+fi
 if [ -n "$changes" ]; then
   echo "::error::Template $latest changes this repository, which records $current. Run copier update and commit the result."
   git status --short -- . ":(exclude)$answers"
