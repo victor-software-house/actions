@@ -50,8 +50,11 @@ Every library cargo would publish sets `all-features = true` and
 `rustdoc-args = ["--cap-lints", "warn"]` in `[package.metadata.docs.rs]`.
 Every such library with features carries
 `#![cfg_attr(docsrs, feature(doc_cfg))]` at its crate root.
-No tracked Rust, TOML, or shell file allows or expects
-`clippy::missing_{errors,panics}_doc` or the pedantic group.
+No tracked Rust, TOML, or shell file, and no file in a mise file-task
+directory, names `clippy::missing_{errors,panics}_doc` or `clippy::pedantic` at any
+level: a crate names them only to change their level.
+A `[lints]` key fails for either lint at any level, and for `pedantic` at
+`allow`.
 It runs `cargo metadata`, `jq`, and `git grep`, so the repository pins `jq`.
 `check:versions` fails when a manifest version changed outside a Version PR.
 It passes with a notice when the repository has no `.ctl/ver.yaml` and

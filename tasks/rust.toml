@@ -120,12 +120,17 @@ run = 'cargo +${RUST_NIGHTLY} doc --no-deps --all-features --locked'
 env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", CARGO_TARGET_DIR = "target/rustdoc" }
 
 # What doc cannot see, for a published crate: the docs.rs metadata of each
-# library cargo would publish, the doc_cfg attribute of each such library with
-# features, and an allow or expect of clippy::missing_{errors,panics}_doc or of
-# the pedantic group in any tracked Rust, TOML, or shell file. The patterns
-# spell every literal through a bracket or a class, so this catalog never
-# matches itself. git grep exits 1 on no match; any other failure fails the
-# task instead of reading as clean.
+# library cargo would publish, which cargo metadata nests as
+# .metadata.docs.rs; the doc_cfg attribute of each such library with
+# features, as the exact line the standard prescribes; and any silencing of
+# clippy::missing_{errors,panics}_doc. Naming either lint or clippy::pedantic,
+# the group that holds them, fails at any level, since a crate names them only
+# to change their level; a TOML key fails for either lint at any level and for
+# pedantic at allow. The search covers tracked Rust, TOML, and shell files
+# and every file in a mise file-task directory. The patterns spell every
+# literal through a bracket or a class, so this catalog never matches itself.
+# git grep exits 1 on no match; any other failure fails the task instead of
+# reading as clean.
 ["check:docs"]
 description = "docs.rs metadata, feature labels, and error docs"
 shell = "bash -c"
@@ -134,7 +139,7 @@ set -euo pipefail
 
 metadata=$(cargo metadata --no-deps --locked --format-version 1)
 
-jq '[.packages[] | select(.publish != [] and any(.targets[]; any(.kind[]; . == "lib" or . == "proc-macro"))) | select(.metadata."docs.rs"."all-features" != true or ((.metadata."docs.rs"."rustdoc-args" // []) as $a | ($a | index("--cap-lints")) as $i | $i == null or $a[$i + 1] != "warn")) | .name] | if length > 0 then error("✘ [package.metadata.docs.rs] needs all-features = true and rustdoc-args = [\"--cap-lints\", \"warn\"] in: \(join(", "))") else empty end' <<<"$metadata"
+jq '[.packages[] | select(.publish != [] and any(.targets[]; any(.kind[]; . == "lib" or . == "proc-macro"))) | select(.metadata.docs.rs."all-features" != true or ((.metadata.docs.rs."rustdoc-args" // []) as $a | ($a | index("--cap-lints")) as $i | $i == null or $a[$i + 1] != "warn")) | .name] | if length > 0 then error("✘ [package.metadata.docs.rs] needs all-features = true and rustdoc-args = [\"--cap-lints\", \"warn\"] in: \(join(", "))") else empty end' <<<"$metadata"
 
 jq -r '.packages[] | select(.publish != [] and (.features | length > 0)) | .targets[] | select(any(.kind[]; . == "lib" or . == "proc-macro")) | .src_path' <<<"$metadata" |
   while read -r root; do
@@ -149,7 +154,7 @@ git grep -n -E \
   -e "clippy[[:space:]]*::[[:space:]]*pedanti[c]" \
   -e "(^|[^[:alnum:]_-])[\"']?pedantic[\"']?([[:space:]]*[.][[:space:]]*level)?[[:space:]]*=[[:space:]]*([\"']allow|[{][^}]*level[[:space:]]*=[[:space:]]*[\"']allow)" \
   -e "[[](workspace[.])?lints[.]clippy[.]pedantic[]]" \
-  -- '*.rs' '*.toml' '*.sh' || status=$?
+  -- '*.rs' '*.toml' '*.sh' 'mise-tasks/**' '.mise-tasks/**' 'mise/tasks/**' '.mise/tasks/**' '.config/mise/tasks/**' || status=$?
 case $status in
   0) echo "✘ clippy::missing_{errors,panics}_doc and the pedantic group must not be allowed or expected"; exit 1 ;;
   1) ;;

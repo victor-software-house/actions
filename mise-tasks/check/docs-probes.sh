@@ -221,6 +221,11 @@ mkdir -p "$dir/mise-tasks"
 printf '#!/usr/bin/env bash\nRUSTFLAGS="-A clippy::missing_panics_doc" cargo clippy\n' >"$dir/mise-tasks/lint.sh"
 fails "a file task's RUSTFLAGS allow" "$dir" "$lint_msg"
 
+standard; dir=$(one file-task-bare)
+mkdir -p "$dir/mise-tasks/check"
+printf '#!/usr/bin/env bash\nRUSTFLAGS="-A clippy::missing_errors_doc" cargo clippy\n' >"$dir/mise-tasks/check/lints"
+fails "an extensionless file task's RUSTFLAGS allow" "$dir" "$lint_msg"
+
 # Workspace probes: an allow in the workspace lints, and an implicit feature.
 dir=$(repo workspace-allow)
 printf '[workspace]\nmembers = ["probe"]\nresolver = "3"\n\n[workspace.lints.clippy]\npedantic = { level = "deny", priority = -1 }\nmissing_errors_doc = "allow"\n' >"$dir/Cargo.toml"
