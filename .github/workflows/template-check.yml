@@ -140,14 +140,25 @@ jobs:
       # template:check left the newest tag's update in the working tree, so
       # the files it changes are the drift.
       - name: Report drift in an issue
-        # Only the default branch's state is drift; any other ref, such as a
-        # manual run on a feature branch, leaves the issue alone.
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.repository.has_issues
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           DIRECTORY: ${{ inputs.working-directory }}
         run: |
+          # Only the default branch's state is drift; any other ref, such as a
+          # manual run on a feature branch, leaves the issue alone. The API
+          # answers for every event, whatever its payload carries.
+          repo=$(gh api "repos/$GH_REPO" --jq '"\(.default_branch) \(.has_issues)"')
+          read -r default_branch has_issues <<<"$repo"
+          if [ "$GITHUB_REF" != "refs/heads/$default_branch" ]; then
+            echo "$GITHUB_REF is not the default branch, so no drift issue changes"
+            exit 0
+          fi
+          if [ "$has_issues" != true ]; then
+            echo "::notice::Issues are off in $GH_REPO, so drift is reported only in this run."
+            exit 0
+          fi
           title="Template update available"
           if [ "$DIRECTORY" != . ]; then
             title="$title in $DIRECTORY"
