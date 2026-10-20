@@ -114,11 +114,28 @@ all-features = true
 rustdoc-args = ["-D", "warnings"]'
 fails 'metadata with -D warnings' "$(one deny-warnings)" "$meta_msg"
 
+standard; meta='[package.metadata.docs.rs]
+rustdoc-args = ["--cap-lints", "warn"]'
+fails 'metadata with no feature choice' "$(one no-feature-choice)" "$meta_msg"
+
+standard; meta='[package.metadata.docs.rs]
+features = ["extra"]
+rustdoc-args = ["--cap-lints", "warn"]'
+passes 'a features list in place of all-features' "$(one features-list)"
+
+standard; meta='[package.metadata.docs.rs]
+features = []
+rustdoc-args = ["--cap-lints", "warn"]'
+passes 'an empty features list' "$(one features-empty)"
+
 standard; lib='//! A probe crate.'
 fails 'features without the doc_cfg attribute' "$(one no-doc-cfg)" "$cfg_msg"
 
 standard; package='publish = false'; meta=''; lib='//! A probe crate.'
 passes 'a publish = false package' "$(one unpublished)"
+
+standard; features='default = []'; lib='//! A probe crate.'
+passes 'an empty default as the only feature, without the attribute' "$(one default-only)"
 
 standard; features=''; meta=''; lib=''
 passes 'a binary-only package' "$(one binary)"
