@@ -113,8 +113,8 @@ The task declares uv and python in its `tools` table, and `mise lock` records
 them in the repository's lock.
 
 The CI workflow runs on pull requests, on pushes to the default branch, and
-daily, and calls the drift-check workflow by commit with the organization's
-secrets:
+daily, and calls the drift-check workflow by commit, passing only the
+template-reader App's private key:
 
 ```yaml
 on:
@@ -132,7 +132,8 @@ jobs:
       issues: write
     with:
       mise-version: 2026.10.9
-    secrets: inherit
+    secrets:
+      TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 ```
 
 Only an update pull request, one that changes `.copier-answers.yml`, fails
