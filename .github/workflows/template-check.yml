@@ -53,9 +53,12 @@ jobs:
     # A pull request from a fork gets no secrets and cannot read the template,
     # so the check is skipped there instead of failing.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # GitHub checks these against the caller's grant when the run starts,
+    # whatever the event, so a caller grants issues: write in the same change
+    # that moves its pin to this workflow.
     permissions:
       contents: read
-      # The drift issue, written only outside pull requests.
+      # The drift issue, written only on the default branch.
       issues: write
     # Runs outside pull requests take turns, so two of them never open two
     # issues. Each pull request run has a group of its own.
@@ -137,7 +140,9 @@ jobs:
       # template:check left the newest tag's update in the working tree, so
       # the files it changes are the drift.
       - name: Report drift in an issue
-        if: github.event_name != 'pull_request' && github.event.repository.has_issues
+        # Only the default branch's state is drift; any other ref, such as a
+        # manual run on a feature branch, leaves the issue alone.
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.repository.has_issues
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
