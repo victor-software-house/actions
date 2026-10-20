@@ -123,8 +123,8 @@ env = { RUSTDOCFLAGS = "--cfg docsrs -D warnings", CARGO_TARGET_DIR = "target/ru
 # library cargo would publish, which cargo metadata nests as
 # .metadata.docs.rs; the doc_cfg attribute of each such library with
 # features, as the exact line the standard prescribes; and any silencing of
-# clippy::missing_{errors,panics}_doc. Naming either lint or clippy::pedantic,
-# the group that holds them, fails at any level, since a crate names them only
+# clippy::missing_{errors,panics}_doc. Naming either lint, or the pedantic
+# group that holds them as a lint path, fails at any level, since a crate names them only
 # to change their level; a TOML key fails for either lint at any level and for
 # pedantic at allow. The search covers tracked Rust, TOML, and shell files
 # and every file in a mise file-task directory. The patterns spell every
@@ -156,7 +156,7 @@ git grep -n -E \
   -e "[[](workspace[.])?lints[.]clippy[.]pedantic[]]" \
   -- '*.rs' '*.toml' '*.sh' 'mise-tasks/**' '.mise-tasks/**' 'mise/tasks/**' '.mise/tasks/**' '.config/mise/tasks/**' || status=$?
 case $status in
-  0) echo "✘ clippy::missing_{errors,panics}_doc and the pedantic group must not be allowed or expected"; exit 1 ;;
+  0) echo "✘ clippy::missing_{errors,panics}_doc and the pedantic group must keep their default: name neither lint, and set pedantic only to warn or deny in [lints]"; exit 1 ;;
   1) ;;
   *) exit "$status" ;;
 esac
