@@ -9,7 +9,7 @@ only the line that pins it.
 
 | Path | Holds |
 |:--|:--|
-| `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `check:versions`, `semver`, and `doc` |
+| `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `check:versions`, `semver`, `doc`, and `check:docs` |
 | `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: one `Template` job that runs `template:check` with a token that reads the template |
@@ -45,6 +45,17 @@ unset.
 `doc` runs `cargo +$RUST_NIGHTLY doc --no-deps --all-features --locked` with
 `RUSTDOCFLAGS="--cfg docsrs -D warnings"`, so a rustdoc warning fails it before
 docs.rs sees it.
+`check:docs` checks what `doc` cannot see, for a repository that publishes.
+Every library cargo would publish sets `all-features = true` and
+`rustdoc-args = ["--cap-lints", "warn"]` in `[package.metadata.docs.rs]`.
+Every such library with features carries
+`#![cfg_attr(docsrs, feature(doc_cfg))]` at its crate root.
+No tracked Rust, TOML, or shell file, and no file in a mise file-task
+directory, names `clippy::missing_{errors,panics}_doc` or `clippy::pedantic` at any
+level: a crate names them only to change their level.
+A `[lints]` key fails for either lint at any level, and for `pedantic` at
+`allow`.
+It runs `cargo metadata`, `jq`, and `git grep`, so the repository pins `jq`.
 `check:versions` fails when a manifest version changed outside a Version PR.
 It passes with a notice when the repository has no `.ctl/ver.yaml` and
 `VERCTL_CONFIG` is unset, and fails when `VERCTL_CONFIG` names no file.
@@ -194,4 +205,5 @@ Pin the commit a tag names, with the tag as a comment.
 |:--|:--|
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
-| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.28's catalog, apart from `format`, the `test` command without `--lib`, the added `doc`, and the `check:versions` guard; the catalog names no toolchain version |
+| `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.28's catalog, apart from `format`, the `test` command without `--lib`, the added `doc` and `check:docs`, and the `check:versions` guard; the catalog names no toolchain version |
+| `check:docs-probes` | The catalog's `check:docs` fails each probe crate that breaks the docs standard and passes each that keeps it; only `cargo metadata --no-deps` runs, so nothing compiles |

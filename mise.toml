@@ -13,6 +13,11 @@ locked = true
 actionlint = "1.7.12"
 # check:catalog reads the TOML catalogs as JSON.
 yq = "4.54.1"
+# check:docs-probes runs the catalog's check:docs, which reads cargo metadata
+# with jq. Only cargo metadata --no-deps runs on the probe crates, so nothing
+# compiles here.
+rust = { version = "1.99.0", profile = "minimal" }
+jq = "1.8.2"
 
 # mise-tasks/ holds this repository's own checks, named by their paths.
 [task_config]
@@ -20,4 +25,4 @@ includes = ["mise-tasks"]
 
 [tasks.verify]
 description = "Every check CI runs"
-depends = ["lint:workflows", "check:pins", "check:catalog"]
+depends = ["lint:workflows", "check:pins", "check:catalog", "check:docs-probes"]
