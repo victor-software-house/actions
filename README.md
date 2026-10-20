@@ -52,6 +52,7 @@ A repository that declares releases includes verctl's `ver` task, which it
 calls.
 `semver` also runs through `ver` (`mise run ver semver`), at the release type
 the pending fragments allow, so a published crate includes `ver` too.
+It fails when the release config is missing.
 `lint`, `test`, and `test:doc` pass `--workspace`, so every member of a
 workspace is checked, not only its root package.
 An inline `[tasks.<name>]` in `mise.toml` replaces a catalog task of the same

@@ -98,10 +98,18 @@ mise run ver check --versions
 # Published crates only. CI runs it before packaging; it compares against the
 # release on crates.io, at the release type the pending fragments allow, so a
 # break fails unless a fragment already bumps the minor. It runs verctl's
-# `ver` task, which a published crate includes beside this catalog.
+# `ver` task, which a published crate includes beside this catalog with its
+# release config. A crate with no release config fails here with that cause.
 [semver]
 description = "Public API changes against the last release (network)"
-run = "mise run ver semver"
+run = '''
+config="${VERCTL_CONFIG:-.ctl/ver.yaml}"
+if [ ! -f "$config" ]; then
+  echo "no $config: semver runs verctl's ver task, which needs the release config" >&2
+  exit 1
+fi
+mise run ver semver
+'''
 
 # Builds the docs as docs.rs does: on a nightly, with --cfg docsrs, and with
 # every rustdoc warning denied. The [lints.rustdoc] lints fire only here;
