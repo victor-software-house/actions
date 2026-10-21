@@ -47,6 +47,12 @@ env:
   GIT_CONFIG_VALUE_0: main
   # The CI profile; local work loads dev from .miserc.toml, which CI never does.
   MISE_ENV: ci
+  # mbx's automatic GC runs when each session ends. On Namespace the first
+  # session to finish evicted about 10 of the 13 GiB just restored, so later
+  # tasks of the same run missed. The cache is saved once per run, after
+  # Verify, so collection there gains nothing. mr-boxington-action sets this
+  # only on GitHub-hosted runners.
+  MBX_GC_AUTO: "0"
 
 jobs:
   verify:
