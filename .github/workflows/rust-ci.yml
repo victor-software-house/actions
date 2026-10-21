@@ -81,7 +81,17 @@ jobs:
       # The objects payload carries mbx's compiled actions, whatever Cargo's
       # target layout; a restored target tree still recompiled most of the
       # clippy, doc-test, and cargo-semver-checks work.
+      #
+      # The cache only speeds the job up, so its result never decides the
+      # job's. continue-on-error also covers the step's post action, which
+      # saves the cache: the key is per commit, so a re-run of a cancelled or
+      # finished run is refused with "Unable to reserve cache", which
+      # jdx/mr-boxington-action v1.7.2 does not recognise as a refused save
+      # (its pattern expects @actions/cache 6.2 output, 6.3 prints a workflow
+      # warning) and reports as a failure. A failed step still shows its
+      # error annotation.
       - name: Cache builds with mbx
+        continue-on-error: true
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
         with:
           working-directory: ${{ inputs.working-directory }}
