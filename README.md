@@ -94,6 +94,11 @@ with mise, restores mbx's compiled objects, and runs `mise run verify` with
 A cache step that fails, such as a save refused because the commit's key is already reserved on a re-run, does not fail the job: the result comes from the build and tests.
 The mise install cache is on for GitHub-hosted runners and off on Namespace,
 where a restored cache lacks rustup's components.
+Each step has its own time limit and the job has none, so the job ends within
+their sum.
+The mbx step's 7 minutes apply to the restore and to the export separately,
+and a failed or timed-out export leaves the job green.
+The export removes the Cargo target first, after every step that reads it.
 A step the workflow does not run, such as a release build, goes in a job of
 the calling workflow beside the call.
 
@@ -103,7 +108,7 @@ the calling workflow beside the call.
 | `working-directory` | `.` | The directory that holds the crate's `mise.toml` |
 | `advisories` | `true` | Runs `mise run deny:advisories` after `verify` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
-| `timeout-minutes` | `8` | Cancels a hung `Verify` job |
+| `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
 
 ## Check the template version
 
