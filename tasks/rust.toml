@@ -45,14 +45,17 @@ description = "Unit and integration tests"
 # integration tests. --lib adds nothing and fails a crate with no library.
 # --bins would select every bin regardless of the flag, so a fuzz target with
 # `test = false` would build and run as a test.
-run = "cargo test --locked --workspace --all-features --tests"
+# --no-fail-fast runs every test binary after one fails, so one run reports
+# every failing binary instead of only the first.
+run = "cargo test --locked --workspace --all-features --tests --no-fail-fast"
 # Stops a hung test run instead of holding the gate. The limit also counts
 # compile time and waits on the target/ lock, so it sits far above a cold build.
 timeout = "30m"
 
 ["test:doc"]
 description = "Doc-tests"
-run = "cargo test --locked --workspace --doc --all-features"
+# --no-fail-fast, as in test: every crate's doc-tests run after one fails.
+run = "cargo test --locked --workspace --doc --all-features --no-fail-fast"
 timeout = "30m"
 
 [deny]
