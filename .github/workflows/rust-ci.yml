@@ -32,7 +32,7 @@ on:
         type: boolean
         default: false
       timeout-minutes:
-        description: Cancels a hung Verify job
+        description: Cancels a hung Verify, Semver or Package step
         type: number
         default: 8
 
@@ -58,7 +58,10 @@ jobs:
   verify:
     name: Verify
     runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # Every step carries its own limit, so the job is bounded by their sum.
+    # A job limit cannot add the inputs' minutes to the fixed ones, since
+    # expressions have no arithmetic, and one at the Verify limit cancelled
+    # the cache export after a passing Verify.
     permissions:
       contents: read
       # A check:versions task reads a pull request that changes a manifest
@@ -69,6 +72,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Check out repository
+        timeout-minutes: 3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -79,6 +83,7 @@ jobs:
       # Rust record without rustup's components, and every Namespace runner
       # starts empty.
       - name: Install locked toolchain
+        timeout-minutes: 5
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
           version: ${{ inputs.mise-version }}
@@ -96,26 +101,42 @@ jobs:
       # (its pattern expects @actions/cache 6.2 output, 6.3 prints a workflow
       # warning) and reports as a failure. A failed step still shows its
       # error annotation.
+      #
+      # The runner applies the step's limit to the restore and to the post
+      # action's export separately, and a timed-out stage fails under
+      # continue-on-error like any other error. Measured 2026-10-22: the
+      # slowest stage is ctl-core's export, 309 s; a's restore takes up to
+      # 80 s and its export 80 s.
+      #
+      # The post action runs after every step that reads target/, so it
+      # removes the Cargo target before exporting. With it kept, a's 24.5 GB
+      # target left 15.8 GB free, and the 20 GB export failed with ENOSPC.
       - name: Cache builds with mbx
         continue-on-error: true
+        timeout-minutes: 7
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
         with:
           working-directory: ${{ inputs.working-directory }}
           github-cache-mode: objects
           isolate-objects-cache: true
+          clean-target-before-export: true
       - name: Verify
+        timeout-minutes: ${{ inputs.timeout-minutes }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: mise run verify
       - name: Advisories
         if: inputs.advisories
+        timeout-minutes: 2
         run: mise run deny:advisories
       # Compares the public API with the last release on crates.io.
       - name: Semver
         if: inputs.semver
+        timeout-minutes: ${{ inputs.timeout-minutes }}
         run: mise run semver
       # --workspace packages every member of a workspace, and the one package
       # of a single crate.
       - name: Package
         if: inputs.semver
+        timeout-minutes: ${{ inputs.timeout-minutes }}
         run: mise x -- cargo package --locked --all-features --workspace
