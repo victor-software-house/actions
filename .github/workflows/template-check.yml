@@ -4,12 +4,17 @@
 #
 #   on:
 #     pull_request:
+#       types: [opened, synchronize, reopened, ready_for_review]
 #     push:
 #       branches: [main]
 #     schedule:
 #       - cron: "17 9 * * *"
+#   concurrency:
+#     group: template-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+#     cancel-in-progress: true
 #   jobs:
 #     template:
+#       if: ${{ !github.event.pull_request.draft }}
 #       uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # <tag>
 #       permissions:
 #         contents: read
@@ -56,8 +61,9 @@ jobs:
   template:
     name: Template
     # A pull request from a fork gets no secrets and cannot read the template,
-    # so the check is skipped there instead of failing.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # so the check is skipped there instead of failing. A draft pull request
+    # runs no check; marking it ready starts the run.
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !github.event.pull_request.draft
     # GitHub checks these against the caller's grant when the run starts,
     # whatever the event, so a caller grants issues: write in the same change
     # that moves its pin to this workflow.
@@ -69,7 +75,9 @@ jobs:
     # issues. Each pull request run has a group of its own.
     concurrency:
       group: ${{ github.event_name == 'pull_request' && format('template-{0}', github.run_id) || format('template-report-{0}', inputs.working-directory) }}
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
+    # One copier update with no build: the smallest Namespace shape, which
+    # bills half of a 4x8.
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     defaults:
       run:
         # GitHub runs bash with pipefail only when the shell is named.
