@@ -1,11 +1,23 @@
 # The reusable Rust CI workflow. A caller's ci.yml holds only the job that
 # calls it, by commit:
 #
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened, ready_for_review]
+#     push:
+#       branches: [main]
+#   concurrency:
+#     group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+#     cancel-in-progress: true
 #   jobs:
 #     verify:
+#       if: ${{ !github.event.pull_request.draft }}
 #       uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
 #       with:
 #         mise-version: <mise version>
+#
+# The caller owns concurrency: one group per branch, cancelling the run a new
+# push replaces.
 #
 # The github context here is the caller's, so the runner follows the caller's
 # visibility: GitHub-hosted for a public repository, free there and measured
@@ -57,6 +69,8 @@ env:
 jobs:
   verify:
     name: Verify
+    # A draft pull request runs no CI; marking it ready starts the run.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
