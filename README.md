@@ -83,7 +83,7 @@ jobs:
   verify:
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
     with:
-      mise-version: 2026.10.9
+      mise-version: 2026.10.17
 ```
 
 The job runs on `ubuntu-latest` for a public repository and on the Namespace
@@ -152,7 +152,7 @@ jobs:
       contents: read
       issues: write
     with:
-      mise-version: 2026.10.9
+      mise-version: 2026.10.17
     secrets:
       TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 ```
