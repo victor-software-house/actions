@@ -82,9 +82,28 @@ jobs:
       # The mise cache stays off on Namespace: a restored cache keeps mise's
       # Rust record without rustup's components, and every Namespace runner
       # starts empty.
+      #
+      # One stalled rustup download once held this step to its limit, with no
+      # room for rustup's own retry. The download timeout applies to each
+      # stalled read, so 30 seconds ends a stall early; the second attempt
+      # resumes from rustup's partial files.
       - name: Install locked toolchain
+        id: toolchain
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        env:
+          RUSTUP_DOWNLOAD_TIMEOUT: "30"
+        with:
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache: ${{ !github.event.repository.private }}
+      - name: Install locked toolchain (retry)
+        if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        env:
+          RUSTUP_DOWNLOAD_TIMEOUT: "30"
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
