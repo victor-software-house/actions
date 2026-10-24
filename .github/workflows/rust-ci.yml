@@ -74,7 +74,8 @@ env:
 jobs:
   # Whether a pull request changes anything the build reads. Documentation is
   # the root's Markdown files, docs/, and openspec/; a documentation file that
-  # a Rust source names, as include_str! does, counts as a build input.
+  # a Rust source or a Cargo manifest names, as include_str! or a package's
+  # readme does, counts as a build input.
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
@@ -117,8 +118,8 @@ jobs:
             build=true
           else
             while IFS= read -r file; do
-              if git grep -qF -- "$(basename "$file")" -- '*.rs'; then
-                echo "A Rust source names $file, so the build reads it."
+              if git grep -qF -- "$(basename "$file")" -- '*.rs' '*Cargo.toml'; then
+                echo "A Rust source or Cargo manifest names $file, so the build reads it."
                 build=true
                 break
               fi
