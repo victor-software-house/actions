@@ -1,12 +1,11 @@
 # The reusable drift check. A caller's workflow runs on pull requests, on
-# pushes to the default branch, and on a daily schedule, and holds only the
-# job that calls this one, by commit, passing the template-reader App's key:
+# merge queue entries, and on a daily schedule, and holds only the job that
+# calls this one, by commit, passing the template-reader App's key:
 #
 #   on:
 #     pull_request:
 #       types: [opened, synchronize, reopened, ready_for_review]
-#     push:
-#       branches: [main]
+#     merge_group:
 #     schedule:
 #       - cron: "17 9 * * *"
 #   concurrency:
@@ -32,13 +31,14 @@
 #
 # Only an update pull request, one that changes .copier-answers.yml, fails on
 # drift: it must reach the newest tag. Any other pull request reports a newer
-# tag as a notice, so a new tag fails no unrelated pull request. A push or a
+# tag as a notice, so a new tag fails no unrelated pull request. The
 # scheduled run keeps one open issue per working directory while the newest
 # tag would change the repository, and closes it once nothing is left to take.
 #
 # With paths, a pull request that touches none of them skips the check: no
-# such change can drift from the template. The skipped job still reports, so
-# a branch rule that requires the check passes.
+# such change can drift from the template. A merge queue entry skips it too:
+# its pull request already ran it. The skipped job still reports, so a branch
+# rule that requires the check passes, in the queue as on the pull request.
 name: Template check
 
 on:
@@ -122,9 +122,11 @@ jobs:
     # so the check is skipped there instead of failing. A draft pull request
     # runs no check; marking it ready starts the run.
     # A pull request with paths runs only when Changes found one; a failed
-    # Changes leaves no output and the check runs.
+    # Changes leaves no output and the check runs. A merge queue entry skips
+    # it, and the skip reports success to the queue's required check.
     if: >-
       !cancelled()
+      && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
       && !github.event.pull_request.draft
       && (github.event_name != 'pull_request' || inputs.paths == '' || needs.changes.outputs.template != 'false')
