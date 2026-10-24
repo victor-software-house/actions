@@ -332,9 +332,9 @@ jobs:
       # A generation larger than the volume still commits, but the next job
       # starts from an empty volume, so the job trims what it leaves behind.
       # The largest workspace here measured a 24.5 GB target/ and a 13 to 20 GB
-      # mbx bundle: mbx keeps a
-      # third of the volume, target/ is removed once it passes half, and the
-      # toolchains and Cargo's home take what is left. A fresh checkout makes
+      # mbx bundle: mbx keeps a third of the volume, target/ is emptied once it
+      # passes half, and the toolchains and Cargo's home take what is left.
+      # A fresh checkout makes
       # Cargo rebuild every workspace crate anyway, which mbx serves; target/
       # keeps the dependencies' units fresh.
       - name: Trim the cache volume
