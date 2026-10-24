@@ -349,7 +349,7 @@ jobs:
               full=true
             fi
             changed+=("${file#"$prefix"}")
-          done < <(git diff --name-only HEAD^1 HEAD)
+          done < <(git diff --name-only --no-renames HEAD^1 HEAD)
           if [ "$full" = true ] || [ "${#changed[@]}" -eq 0 ]; then
             echo "A change outside the workspace, a document a Rust source reads, or no source change: every test runs."
             exit 0
