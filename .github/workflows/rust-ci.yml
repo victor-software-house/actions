@@ -74,9 +74,9 @@ env:
 jobs:
   # Whether a pull request changes anything the build reads. Documentation is
   # the root's Markdown files, docs/, and openspec/. A documentation file
-  # still counts as a build input when a Rust source or a Cargo manifest names
-  # it (include_str!, a readme key), when it is a README beside a Cargo.toml,
-  # which cargo package takes, or when any manifest lists its package files.
+  # still counts as a build input when a Rust source or a Cargo manifest
+  # reaches it by a relative path (include_str!, a readme key), or when it
+  # sits under a package's directory, whose files cargo package ships.
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
@@ -117,24 +117,28 @@ jobs:
           build=false
           if [ "$ALL" != "$DOCS" ]; then
             build=true
-          elif git grep -qE '^[[:space:]]*(include|exclude)[[:space:]]*=' -- '*Cargo.toml'; then
-            echo "A Cargo manifest lists its package files, so a documentation file may ship."
-            build=true
           else
             while IFS= read -r file; do
-              name=$(basename "$file")
-              if git grep -qF -- "$name" -- '*.rs' '*Cargo.toml'; then
-                echo "A Rust source or Cargo manifest names $file, so the build reads it."
+              # A path to a file outside the package, as include_str! or a readme
+              # key spells it, climbs to the root and ends in the file's path.
+              if git grep -qF -- "/$file\"" -- '*.rs' '*Cargo.toml'; then
+                echo "A Rust source or Cargo manifest reads $file, so the build reads it."
                 build=true
                 break
               fi
-              # cargo package takes a README beside the manifest when no readme
-              # key names one.
-              if [[ "$name" == README* ]] && [ -f "$(dirname "$file")/Cargo.toml" ]; then
-                echo "$file ships in the package beside its Cargo.toml."
-                build=true
-                break
-              fi
+              # cargo package ships the files under a package's directory.
+              dir=$(dirname "$file")
+              while :; do
+                if [ -f "$dir/Cargo.toml" ] && grep -q '^\[package\]' "$dir/Cargo.toml"; then
+                  echo "$file ships in the package at $dir."
+                  build=true
+                  break 2
+                fi
+                if [ "$dir" = . ]; then
+                  break
+                fi
+                dir=$(dirname "$dir")
+              done
             done < <(jq -r '.[]' <<<"$DOCS_FILES")
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"

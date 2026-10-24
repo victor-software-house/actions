@@ -106,10 +106,12 @@ A pull request that changes only documentation builds nothing.
 A `Changes` job on `ubuntu-latest` reads the changed paths with
 [dorny/paths-filter](https://github.com/dorny/paths-filter).
 Documentation is the root's Markdown files, `docs/`, and `openspec/`,
-except a file whose name a Rust source or a Cargo manifest contains, as an
-`include_str!` or a package's `readme` does, and a README beside a
-`Cargo.toml`, which `cargo package` takes.
-When any manifest sets `include` or `exclude`, every pull request builds.
+except a file a Rust source or a Cargo manifest reaches by a relative path
+ending in its repository path, as an `include_str!` or a `readme` key does,
+and a file under a directory
+whose `Cargo.toml` has a `[package]` table, which `cargo package` ships.
+A workspace whose root manifest has no `[package]` keeps its root
+documentation out of every package.
 For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
 repository defines.
