@@ -10,7 +10,7 @@ only the line that pins it.
 | Path | Holds |
 |:--|:--|
 | `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `check:versions`, `semver`, `doc`, and `check:docs` |
-| `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
+| `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: a `Verify` job that runs `mise run verify`, then the network checks, or only the documentation checks for a documentation-only pull request |
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: one `Template` job that runs `template:check` with a token that reads the template |
 
@@ -101,6 +101,18 @@ and a failed or timed-out export leaves the job green.
 The export removes the Cargo target first, after every step that reads it.
 A step the workflow does not run, such as a release build, goes in a job of
 the calling workflow beside the call.
+
+A pull request that changes only documentation builds nothing.
+A `Changes` job on `ubuntu-latest` reads the changed paths with
+[dorny/paths-filter](https://github.com/dorny/paths-filter).
+Documentation is the root's Markdown files, `docs/`, and `openspec/`,
+except a file whose name a Rust source contains, as an `include_str!` does.
+For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
+without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
+repository defines.
+The check keeps its name and reports a result either way.
+A push to the default branch always builds, so the mbx cache saved from it
+stays current.
 
 | Input | Default | Effect |
 |:--|:--|:--|

@@ -22,6 +22,11 @@
 # The github context here is the caller's, so the runner follows the caller's
 # visibility: GitHub-hosted for a public repository, free there and measured
 # faster for these crates, and the Namespace runner for a private one.
+#
+# A pull request that changes only documentation builds nothing: Verify runs
+# the documentation checks on a GitHub-hosted runner instead, under the same
+# check name, so the check still reports. A push always builds, so the build
+# cache, saved only from the default branch, stays current.
 name: Rust CI
 
 on:
@@ -67,11 +72,68 @@ env:
   MBX_GC_AUTO: "0"
 
 jobs:
+  # Whether a pull request changes anything the build reads. Documentation is
+  # the root's Markdown files, docs/, and openspec/; a documentation file that
+  # a Rust source names, as include_str! does, counts as a build input.
+  changes:
+    name: Changes
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    # One API call and a checkout to search: no build, so a GitHub-hosted
+    # runner, which bills no Namespace units, whatever the visibility.
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.scope.outputs.build }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          list-files: json
+          filters: |
+            all:
+              - '**'
+            docs:
+              - '*.md'
+              - 'docs/**'
+              - 'openspec/**'
+      - name: Decide whether to build
+        id: scope
+        shell: bash
+        env:
+          ALL: ${{ steps.filter.outputs.all_count }}
+          DOCS: ${{ steps.filter.outputs.docs_count }}
+          DOCS_FILES: ${{ steps.filter.outputs.docs_files }}
+        run: |
+          build=false
+          if [ "$ALL" != "$DOCS" ]; then
+            build=true
+          else
+            while IFS= read -r file; do
+              if git grep -qF -- "$(basename "$file")" -- '*.rs'; then
+                echo "A Rust source names $file, so the build reads it."
+                build=true
+                break
+              fi
+            done < <(jq -r '.[]' <<<"$DOCS_FILES")
+          fi
+          echo "build=$build" >>"$GITHUB_OUTPUT"
+
   verify:
     name: Verify
-    # A draft pull request runs no CI; marking it ready starts the run.
-    if: ${{ !github.event.pull_request.draft }}
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
+    needs: changes
+    # A draft pull request runs no CI; marking it ready starts the run. A push
+    # skips Changes and builds. A failed Changes leaves no output, so Verify
+    # builds then too.
+    if: ${{ !cancelled() && !github.event.pull_request.draft }}
+    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -103,6 +165,7 @@ jobs:
       # resumes from rustup's partial files.
       - name: Install locked toolchain
         id: toolchain
+        if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 3
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
@@ -122,6 +185,40 @@ jobs:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ !github.event.repository.private }}
+      # A documentation-only pull request: the repository's tools without the
+      # Rust toolchain, then the documentation checks it defines. The mise
+      # cache stays off, so this run never saves a cache without Rust that a
+      # later build would restore.
+      - name: Install the tools without Rust
+        if: needs.changes.outputs.build == 'false'
+        timeout-minutes: 3
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        env:
+          MISE_DISABLE_TOOLS: rust
+        with:
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache: false
+      - name: Documentation checks
+        if: needs.changes.outputs.build == 'false'
+        timeout-minutes: 3
+        shell: bash
+        env:
+          MISE_DISABLE_TOOLS: rust
+        run: |
+          tasks=()
+          for task in lint:md lint:typos specs; do
+            if mise tasks info "$task" >/dev/null 2>&1; then
+              tasks+=("$task")
+            fi
+          done
+          if [ "${#tasks[@]}" -eq 0 ]; then
+            echo "This repository defines no documentation check."
+            exit 0
+          fi
+          for task in "${tasks[@]}"; do
+            mise run "$task"
+          done
       # The objects payload carries mbx's compiled actions, whatever Cargo's
       # target layout; a restored target tree still recompiled most of the
       # clippy, doc-test, and cargo-semver-checks work.
@@ -145,6 +242,7 @@ jobs:
       # removes the Cargo target before exporting. With it kept, a's 24.5 GB
       # target left 15.8 GB free, and the 20 GB export failed with ENOSPC.
       - name: Cache builds with mbx
+        if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 7
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
@@ -154,22 +252,23 @@ jobs:
           isolate-objects-cache: true
           clean-target-before-export: true
       - name: Verify
+        if: needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: mise run verify
       - name: Advisories
-        if: inputs.advisories
+        if: inputs.advisories && needs.changes.outputs.build != 'false'
         timeout-minutes: 2
         run: mise run deny:advisories
       # Compares the public API with the last release on crates.io.
       - name: Semver
-        if: inputs.semver
+        if: inputs.semver && needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
         run: mise run semver
       # --workspace packages every member of a workspace, and the one package
       # of a single crate.
       - name: Package
-        if: inputs.semver
+        if: inputs.semver && needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
         run: mise x -- cargo package --locked --all-features --workspace
