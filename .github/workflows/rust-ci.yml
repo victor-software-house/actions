@@ -73,9 +73,10 @@ env:
 
 jobs:
   # Whether a pull request changes anything the build reads. Documentation is
-  # the root's Markdown files, docs/, and openspec/; a documentation file that
-  # a Rust source or a Cargo manifest names, as include_str! or a package's
-  # readme does, counts as a build input.
+  # the root's Markdown files, docs/, and openspec/. A documentation file
+  # still counts as a build input when a Rust source or a Cargo manifest names
+  # it (include_str!, a readme key), when it is a README beside a Cargo.toml,
+  # which cargo package takes, or when any manifest lists its package files.
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
@@ -116,10 +117,21 @@ jobs:
           build=false
           if [ "$ALL" != "$DOCS" ]; then
             build=true
+          elif git grep -qE '^[[:space:]]*(include|exclude)[[:space:]]*=' -- '*Cargo.toml'; then
+            echo "A Cargo manifest lists its package files, so a documentation file may ship."
+            build=true
           else
             while IFS= read -r file; do
-              if git grep -qF -- "$(basename "$file")" -- '*.rs' '*Cargo.toml'; then
+              name=$(basename "$file")
+              if git grep -qF -- "$name" -- '*.rs' '*Cargo.toml'; then
                 echo "A Rust source or Cargo manifest names $file, so the build reads it."
+                build=true
+                break
+              fi
+              # cargo package takes a README beside the manifest when no readme
+              # key names one.
+              if [[ "$name" == README* ]] && [ -f "$(dirname "$file")/Cargo.toml" ]; then
+                echo "$file ships in the package beside its Cargo.toml."
                 build=true
                 break
               fi

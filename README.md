@@ -107,7 +107,9 @@ A `Changes` job on `ubuntu-latest` reads the changed paths with
 [dorny/paths-filter](https://github.com/dorny/paths-filter).
 Documentation is the root's Markdown files, `docs/`, and `openspec/`,
 except a file whose name a Rust source or a Cargo manifest contains, as an
-`include_str!` or a package's `readme` does.
+`include_str!` or a package's `readme` does, and a README beside a
+`Cargo.toml`, which `cargo package` takes.
+When any manifest sets `include` or `exclude`, every pull request builds.
 For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
 repository defines.
