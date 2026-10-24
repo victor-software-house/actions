@@ -106,8 +106,8 @@ A pull request that changes only documentation builds nothing.
 A `Changes` job on `ubuntu-latest` reads the changed paths with
 [dorny/paths-filter](https://github.com/dorny/paths-filter).
 Documentation is the root's Markdown files, `docs/`, and `openspec/`,
-except a file a Rust source reaches by a relative path ending in its
-repository path, as an `include_str!` or a test that reads it does.
+except a file a Rust source names by its repository path, alone or at the
+end of a relative path, as a test or an `include_str!` that reads it does.
 For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
 repository defines.

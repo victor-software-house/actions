@@ -74,8 +74,8 @@ env:
 jobs:
   # Whether a pull request changes anything the build reads. Documentation is
   # the root's Markdown files, docs/, and openspec/. A documentation file
-  # still counts as a build input when a Rust source reaches it by a relative
-  # path (include_str!, a test that reads it), and every pull request builds
+  # still counts as a build input when a Rust source names its path (a test
+  # that reads it, include_str!), and every pull request builds
   # for a published crate, whose Package step ships documentation files.
   changes:
     name: Changes
@@ -123,10 +123,10 @@ jobs:
             build=true
           else
             while IFS= read -r file; do
-              # A Rust source that reads a file outside its crate spells a
-              # relative path that climbs to the root and ends in the file's
-              # path.
-              if git grep -qF -- "/$file\"" -- '*.rs'; then
+              # A Rust source that reads the file spells its path from the root,
+              # as a test run there does, or a relative path that climbs to the
+              # root and ends in it, as include_str! from a crate does.
+              if git grep -qF -e "/$file\"" -e "\"$file\"" -e "\"./$file\"" -- '*.rs'; then
                 echo "A Rust source reads $file, so the build reads it."
                 build=true
                 break
