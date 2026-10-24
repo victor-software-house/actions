@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-#MISE description="tasks/rust.toml equals its source apart from format, test, test:doc, doc, check:docs, and the check:versions and semver guards, and names no toolchain"
+#MISE description="tasks/rust.toml equals its source apart from format, test, test:doc and its target directory, doc, check:docs, and the check:versions and semver guards, and names no toolchain"
 # The Rust catalog is ctl-core v0.6.28's tasks/rust.toml. Every task keeps its
 # source field for field, except these: format reads RUSTFMT_TOOLCHAIN in
 # place of a pinned nightly; test drops --lib, which fails a crate with no
 # library; test and test:doc add --no-fail-fast, so a run reports every
-# failing test binary; doc and check:docs are new, and check:docs-probes tests the latter; check:versions fails when VERCTL_CONFIG names no
+# failing test binary; test:doc builds in target/doctest, apart from test; doc and check:docs are new, and check:docs-probes tests the latter; check:versions fails when VERCTL_CONFIG names no
 # file; and semver fails when the release config is missing. The source's verify stays with each repository, which composes its
 # own.
 set -euo pipefail
@@ -20,10 +20,11 @@ expect() {
     exit 1
   fi
 }
-diff <(yq -p toml -o json 'del(.verify, .format, .test.run, .["test:doc"].run, .["check:versions"].run, .semver.run) | sort_keys(.)' "$src") <(yq -p toml -o json 'del(.format, .doc, .["check:docs"], .test.run, .["test:doc"].run, .["check:versions"].run, .semver.run) | sort_keys(.)' "$catalog")
+diff <(yq -p toml -o json 'del(.verify, .format, .test.run, .["test:doc"].run, .["check:versions"].run, .semver.run) | sort_keys(.)' "$src") <(yq -p toml -o json 'del(.format, .doc, .["check:docs"], .test.run, .["test:doc"].run, .["test:doc"].env, .["check:versions"].run, .semver.run) | sort_keys(.)' "$catalog")
 expect '.format.run' 'cargo ${RUSTFMT_TOOLCHAIN:-} fmt --all -- --check'
 expect '.test.run' 'cargo test --locked --workspace --all-features --tests --no-fail-fast'
 expect '.["test:doc"].run' 'cargo test --locked --workspace --doc --all-features --no-fail-fast'
+expect '.["test:doc"].env.CARGO_TARGET_DIR' 'target/doctest'
 expect '.doc.run' 'cargo +${RUST_NIGHTLY} doc --no-deps --all-features --locked'
 expect '.doc.env.RUSTDOCFLAGS' '--cfg docsrs -D warnings'
 expect '.doc.env.CARGO_TARGET_DIR' 'target/rustdoc'
