@@ -56,6 +56,13 @@ timeout = "30m"
 description = "Doc-tests"
 # --no-fail-fast, as in test: every crate's doc-tests run after one fails.
 run = "cargo test --locked --workspace --doc --all-features --no-fail-fast"
+# Its own target directory, as doc has. verify runs test and test:doc at the
+# same time, and cargo holds the build directory lock only while it compiles,
+# not while doc-tests run: with one shared target/debug, test took the lock
+# when test:doc finished compiling and rewrote libraries its doc-tests were
+# still loading, which ended in a rustdoc internal compiler error ("no
+# resolution for an import").
+env = { CARGO_TARGET_DIR = "target/doctest" }
 timeout = "30m"
 
 [deny]
