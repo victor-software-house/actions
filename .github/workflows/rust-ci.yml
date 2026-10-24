@@ -120,8 +120,11 @@ jobs:
           else
             while IFS= read -r file; do
               # A path to a file outside the package, as include_str! or a readme
-              # key spells it, climbs to the root and ends in the file's path.
-              if git grep -qF -- "/$file\"" -- '*.rs' '*Cargo.toml'; then
+              # key spells it, climbs to the root and ends in the file's path;
+              # the root manifest, as [workspace.package] readme, spells the
+              # path itself.
+              if git grep -qF -- "/$file\"" -- '*.rs' '*Cargo.toml' ||
+                { [ -f Cargo.toml ] && grep -qF -- "\"$file\"" Cargo.toml; }; then
                 echo "A Rust source or Cargo manifest reads $file, so the build reads it."
                 build=true
                 break

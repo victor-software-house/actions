@@ -110,7 +110,8 @@ except a file a Rust source or a Cargo manifest reaches by a relative path
 ending in its repository path, as an `include_str!` or a `readme` key does,
 and a file under a directory
 whose `Cargo.toml` has a `[package]` table, which `cargo package` ships.
-A workspace whose root manifest has no `[package]` keeps its root
+A workspace whose root manifest has no `[package]` and names none of its
+root documentation, as a `[workspace.package]` `readme` would, keeps that
 documentation out of every package.
 For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
