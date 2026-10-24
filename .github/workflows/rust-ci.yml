@@ -156,7 +156,12 @@ jobs:
     if: ${{ !cancelled() && !github.event.pull_request.draft }}
     # A private repository's build runs on a Namespace 4x8 with a cache volume.
     # A tag holds only [a-z0-9.-], which every repository name here matches.
-    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"]', github.event.repository.name, inputs.cache-size)) || 'ubuntu-latest' }}
+    # A pull request reads the volume but never commits it: the toolchains,
+    # Cargo's home and mbx's store it holds are run by every later build,
+    # releases included, so only code that already passed review (a push, a
+    # merge queue run, a dispatch) writes them, as the GitHub cache saves only
+    # from the default branch.
+    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '')) || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -354,17 +359,18 @@ jobs:
         env:
           SIZE_GB: ${{ inputs.cache-size }}
           JOB_STATUS: ${{ job.status }}
+        # target/ first, so a failing mbx gc cannot leave it over its limit.
         run: |
-          if [ "$JOB_STATUS" = success ]; then
-            MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
-          else
-            echo "An earlier step failed, so mbx's store is left as it is."
-          fi
           limit=$((SIZE_GB * 1000000000 / 2))
           if [ -d target ] && [ "$(du -sb target | cut -f1)" -gt "$limit" ]; then
             # target/ is a mount point, so only its contents go.
             echo "target/ is over $((SIZE_GB / 2)) GB, so its contents are removed."
             find target -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          fi
+          if [ "$JOB_STATUS" = success ]; then
+            MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
+          else
+            echo "An earlier step failed, so mbx's store is left as it is."
           fi
           du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target
           df -h /cache
