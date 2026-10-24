@@ -112,6 +112,20 @@ The export removes the Cargo target first, after every step that reads it.
 A step the workflow does not run, such as a release build, goes in a job of
 the calling workflow beside the call.
 
+A pull request runs only the tests its diff can reach; a merge queue run, a
+push and a dispatch run every test.
+Each changed file belongs to the deepest workspace package whose directory
+holds it, and the selection is those packages and every package that depends
+on them through a path dependency of any kind.
+A file that belongs to no package, such as `Cargo.lock` or a workflow,
+selects every test.
+The selection reaches the repository's `test` task as a nextest filterset in
+`TEST_FILTERSET` (`package(=a) | package(=b)`), so a task that runs
+`cargo nextest run --workspace` passes it with `-E` and `--no-tests=pass`;
+the catalog's `cargo test` ignores it and runs everything.
+The whole workspace still builds: building fewer packages resolves features
+per package and rebuilds dependencies the full build already has.
+
 A pull request that changes only documentation builds nothing.
 A `Changes` job on `ubuntu-latest` reads the changed paths with
 [dorny/paths-filter](https://github.com/dorny/paths-filter).

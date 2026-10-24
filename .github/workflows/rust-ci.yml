@@ -183,6 +183,9 @@ jobs:
           # A crate's test fixtures may live in a submodule; with none, this
           # checks out nothing more.
           submodules: true
+          # A pull request checks out its merge commit; its first parent is
+          # the base branch, which test selection diffs against.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
       # The volume is mounted at /cache; the action bind-mounts each path into
       # it, so every later step reads and writes the volume. mise's installs
       # and rustup's toolchains share it, so the mise record of Rust and
@@ -313,6 +316,70 @@ jobs:
         with:
           working-directory: ${{ inputs.working-directory }}
           backend: local
+      # A pull request runs only the tests its diff can reach; a merge queue
+      # run, a push and a dispatch run every test. The selection is a nextest
+      # filterset in TEST_FILTERSET, which a repository's test task passes to
+      # `cargo nextest run -E`; the catalog's cargo test ignores it and runs
+      # everything. Each changed file belongs to the deepest workspace package
+      # whose directory holds it, and the selection is those packages and
+      # every package that depends on them through a path dependency of any
+      # kind. A file that belongs to no package selects everything, except
+      # documentation (the root's Markdown, docs/, openspec/) that no Rust
+      # source names, which selects nothing. The whole workspace still builds:
+      # building fewer packages would resolve features per package and
+      # rebuild dependencies the full build already has.
+      - name: Select tests from the diff
+        if: github.event_name == 'pull_request' && needs.changes.outputs.build != 'false'
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          prefix=$(git rev-parse --show-prefix)
+          changed=()
+          full=false
+          while IFS= read -r file; do
+            # The Changes job's documentation: it selects nothing unless a
+            # Rust source names its path, as a test or include_str! does.
+            if [[ "$file" == docs/* || "$file" == openspec/* || ("$file" != */* && "$file" == *.md) ]]; then
+              if git grep -qF -e "/$file\"" -e "\"$file\"" -e "\"./$file\"" -- '*.rs'; then
+                full=true
+              fi
+              continue
+            fi
+            if [[ "$file" != "$prefix"* ]]; then
+              full=true
+            fi
+            changed+=("${file#"$prefix"}")
+          done < <(git diff --name-only HEAD^1 HEAD)
+          if [ "$full" = true ] || [ "${#changed[@]}" -eq 0 ]; then
+            echo "A change outside the workspace, a document a Rust source reads, or no source change: every test runs."
+            exit 0
+          fi
+          metadata=$(mise x -- cargo metadata --no-deps --format-version 1 --locked)
+          filterset=$(jq -r --args '
+            .workspace_root as $root
+            | [.packages[] | {name,
+                dir: (.manifest_path | ltrimstr($root + "/") | rtrimstr("Cargo.toml") | rtrimstr("/")),
+                deps: [.dependencies[] | select(.path) | .path | ltrimstr($root + "/")]}] as $pkgs
+            | ($pkgs | map({key: .dir, value: .name}) | from_entries) as $by_dir
+            | [$ARGS.positional[] as $f
+                | [$pkgs[] | .dir as $d | select($d != "" and ($f | startswith($d + "/"))) | $d]
+                | max_by(length) | if . then $by_dir[.] else null end] as $owners
+            | if any($owners[]; . == null) then ""
+              else
+                ($pkgs | map({key: .name, value: [.deps[] as $p | $by_dir[$p] // empty]}) | from_entries) as $uses
+                | {set: ($owners | unique), new: ($owners | unique)}
+                | until(.new == [];
+                    .set as $s
+                    | ([$uses | to_entries[] | select(any(.value[]; IN($s[]))) | .key] - $s) as $n
+                    | {set: ($s + $n | unique), new: $n})
+                | [.set[] | "package(=\(.))"] | join(" | ")
+              end' "${changed[@]}" <<<"$metadata")
+          if [ -z "$filterset" ]; then
+            echo "A changed file belongs to no workspace package: every test runs."
+            exit 0
+          fi
+          echo "Tests run for: $filterset"
+          echo "TEST_FILTERSET=$filterset" >>"$GITHUB_ENV"
       - name: Verify
         if: needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
