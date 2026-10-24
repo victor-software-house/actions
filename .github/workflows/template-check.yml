@@ -100,6 +100,11 @@ jobs:
         run: |
           specs=()
           while IFS= read -r path; do
+            # A stray space or carriage return would match no file and skip
+            # the check.
+            path=${path%$'\r'}
+            path=${path#"${path%%[![:space:]]*}"}
+            path=${path%"${path##*[![:space:]]}"}
             if [ -n "$path" ]; then
               specs+=(":(glob)${DIRECTORY%/}/$path")
             fi
