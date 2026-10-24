@@ -74,9 +74,9 @@ env:
 jobs:
   # Whether a pull request changes anything the build reads. Documentation is
   # the root's Markdown files, docs/, and openspec/. A documentation file
-  # still counts as a build input when a Rust source or a Cargo manifest
-  # reaches it by a relative path (include_str!, a readme key), or when it
-  # sits under a package's directory, whose files cargo package ships.
+  # still counts as a build input when a Rust source reaches it by a relative
+  # path (include_str!, a test that reads it), and every pull request builds
+  # for a published crate, whose Package step ships documentation files.
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
@@ -113,35 +113,24 @@ jobs:
           ALL: ${{ steps.filter.outputs.all_count }}
           DOCS: ${{ steps.filter.outputs.docs_count }}
           DOCS_FILES: ${{ steps.filter.outputs.docs_files }}
+          PUBLISHED: ${{ inputs.semver }}
         run: |
           build=false
           if [ "$ALL" != "$DOCS" ]; then
             build=true
+          elif [ "$PUBLISHED" = true ]; then
+            echo "A published crate packages its documentation, so every pull request builds."
+            build=true
           else
             while IFS= read -r file; do
-              # A path to a file outside the package, as include_str! or a readme
-              # key spells it, climbs to the root and ends in the file's path;
-              # the root manifest, as [workspace.package] readme, spells the
-              # path itself.
-              if git grep -qF -- "/$file\"" -- '*.rs' '*Cargo.toml' ||
-                { [ -f Cargo.toml ] && grep -qF -- "\"$file\"" Cargo.toml; }; then
-                echo "A Rust source or Cargo manifest reads $file, so the build reads it."
+              # A Rust source that reads a file outside its crate spells a
+              # relative path that climbs to the root and ends in the file's
+              # path.
+              if git grep -qF -- "/$file\"" -- '*.rs'; then
+                echo "A Rust source reads $file, so the build reads it."
                 build=true
                 break
               fi
-              # cargo package ships the files under a package's directory.
-              dir=$(dirname "$file")
-              while :; do
-                if [ -f "$dir/Cargo.toml" ] && grep -q '^\[package\]' "$dir/Cargo.toml"; then
-                  echo "$file ships in the package at $dir."
-                  build=true
-                  break 2
-                fi
-                if [ "$dir" = . ]; then
-                  break
-                fi
-                dir=$(dirname "$dir")
-              done
             done < <(jq -r '.[]' <<<"$DOCS_FILES")
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"

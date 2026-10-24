@@ -106,16 +106,13 @@ A pull request that changes only documentation builds nothing.
 A `Changes` job on `ubuntu-latest` reads the changed paths with
 [dorny/paths-filter](https://github.com/dorny/paths-filter).
 Documentation is the root's Markdown files, `docs/`, and `openspec/`,
-except a file a Rust source or a Cargo manifest reaches by a relative path
-ending in its repository path, as an `include_str!` or a `readme` key does,
-and a file under a directory
-whose `Cargo.toml` has a `[package]` table, which `cargo package` ships.
-A workspace whose root manifest has no `[package]` and names none of its
-root documentation, as a `[workspace.package]` `readme` would, keeps that
-documentation out of every package.
+except a file a Rust source reaches by a relative path ending in its
+repository path, as an `include_str!` or a test that reads it does.
 For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
 repository defines.
+With `semver`, every pull request builds: `cargo package` ships documentation
+files, and the `Package` step checks it.
 The check keeps its name and reports a result either way.
 A push to the default branch always builds, so the mbx cache saved from it
 stays current.
