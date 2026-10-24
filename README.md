@@ -159,15 +159,14 @@ Copier runs through `uvx`, at the version the template pins as
 The task declares uv and python in its `tools` table, and `mise lock` records
 them in the repository's lock.
 
-The CI workflow runs on pull requests, on pushes to the default branch, and
-daily, and calls the drift-check workflow by commit, passing only the
+The CI workflow runs on pull requests, on merge queue entries, and daily,
+and calls the drift-check workflow by commit, passing only the
 template-reader App's private key:
 
 ```yaml
 on:
   pull_request:
-  push:
-    branches: [main]
+  merge_group:
   schedule:
     - cron: "17 9 * * *"
 
@@ -187,7 +186,11 @@ Only an update pull request, one that changes `.copier-answers.yml`, fails
 when the newest tag would change the repository.
 Every other pull request passes with a notice, so a new tag fails no
 unrelated pull request.
-A push or a scheduled run opens an issue titled "Template update available"
+A merge queue entry skips the check, which its pull request already ran;
+the skipped job reports success, so a ruleset that requires it lets the
+entry land.
+A push to the default branch runs nothing.
+The scheduled run opens an issue titled "Template update available"
 (with " in <directory>" below the root) that lists the files the newest tag
 changes, updates it on later runs, and closes it once the repository is on
 a tag that leaves nothing to update.
