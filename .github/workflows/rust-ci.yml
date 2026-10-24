@@ -334,9 +334,18 @@ jobs:
       # The largest workspace here measured a 24.5 GB target/ and a 13 to 20 GB
       # mbx bundle: mbx keeps a third of the volume, target/ is emptied once it
       # passes half, and the toolchains and Cargo's home take what is left.
-      # A fresh checkout makes
-      # Cargo rebuild every workspace crate anyway, which mbx serves; target/
-      # keeps the dependencies' units fresh.
+      #
+      # Namespace commits the volume when the job's main process exits cleanly,
+      # which a failed step does not change, so a failed run's state is kept
+      # too, and a job may fork a generation older than the last commit.
+      # Neither can make a build use a wrong output. Cargo empties a unit's
+      # fingerprint before compiling it and writes it only after the unit
+      # succeeds, so an interrupted unit is rebuilt (fingerprint/mod.rs).
+      # mbx publishes each object by atomic rename and checks it against its
+      # content hash on first read, treating a mismatch as a miss
+      # (docs/stability.md). mbx's collection still runs only after every
+      # earlier step passed, so a red run never trims the store a green run
+      # would reuse; the target/ size limit applies to every run.
       - name: Trim the cache volume
         if: ${{ !cancelled() && needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted' }}
         continue-on-error: true
@@ -344,13 +353,18 @@ jobs:
         shell: bash
         env:
           SIZE_GB: ${{ inputs.cache-size }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
+          if [ "$JOB_STATUS" = success ]; then
+            MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
+          else
+            echo "An earlier step failed, so mbx's store is left as it is."
+          fi
           limit=$((SIZE_GB * 1000000000 / 2))
           if [ -d target ] && [ "$(du -sb target | cut -f1)" -gt "$limit" ]; then
             # target/ is a mount point, so only its contents go.
             echo "target/ is over $((SIZE_GB / 2)) GB, so its contents are removed."
             find target -mindepth 1 -maxdepth 1 -exec rm -rf {} +
           fi
-          du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target 2>/dev/null || true
+          du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target
           df -h /cache
