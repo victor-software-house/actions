@@ -12,7 +12,7 @@ only the line that pins it.
 | `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `check:versions`, `semver`, `doc`, and `check:docs` |
 | `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: one `Verify` job that runs `mise run verify`, then the network checks |
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
-| `.github/workflows/template-check.yml` | The reusable drift check: one `Template` job that runs `template:check` with a token that reads the template |
+| `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 
 ## Use the Rust catalog
 
@@ -174,6 +174,16 @@ GitHub App, with the client ID in the organization variable
 It passes the token only to the step that runs `template:check`.
 It takes `working-directory` for a template rendered below the repository
 root, and skips a pull request from a fork, which gets no secrets.
+
+`paths` lists the files the template renders, one glob per line, relative to
+`working-directory`.
+A pull request that changes none of them skips the check: a `Changes` job on
+`ubuntu-latest` diffs the merge commit against its base with git's glob
+pathspecs, where `*` stays within one directory and `**` crosses them.
+The skipped `Template` job still reports, so a branch rule that requires
+`template / Template` passes.
+Pushes and scheduled runs always check.
+Without `paths`, every pull request checks.
 
 ## Turn a template piece off or on
 
