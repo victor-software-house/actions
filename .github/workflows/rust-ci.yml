@@ -23,6 +23,12 @@
 # visibility: GitHub-hosted for a public repository, free there and measured
 # faster for these crates, and the Namespace runner for a private one.
 #
+# The build cache follows the runner the job lands on, with no input: a
+# Namespace runner mounts a cache volume tagged rust-<repository> that keeps
+# the toolchains, Cargo's home, target/, and mbx's store between runs, and a
+# GitHub-hosted runner restores the mise install cache and mbx's objects from
+# the GitHub Actions cache.
+#
 # A pull request that changes only documentation builds nothing: Verify runs
 # the documentation checks on a GitHub-hosted runner instead, under the same
 # check name, so the check still reports. A push always builds, so the build
@@ -54,6 +60,10 @@ on:
         description: Cancels a hung Verify, Semver or Package step
         type: number
         default: 8
+      cache-size:
+        description: Size in GB of the Namespace cache volume a private repository's build mounts
+        type: number
+        default: 50
 
 permissions:
   contents: read
@@ -68,9 +78,9 @@ env:
   MISE_ENV: ci
   # mbx's automatic GC runs when each session ends. On Namespace the first
   # session to finish evicted about 10 of the 13 GiB just restored, so later
-  # tasks of the same run missed. The cache is saved once per run, after
-  # Verify, so collection there gains nothing. mr-boxington-action sets this
-  # only on GitHub-hosted runners.
+  # tasks of the same run missed. Collection runs once, after the build: the
+  # GitHub cache is saved after Verify, and a cache volume is trimmed by its
+  # own step at the end of the job.
   MBX_GC_AUTO: "0"
 
 jobs:
@@ -144,7 +154,9 @@ jobs:
     # skips Changes and builds. A failed Changes leaves no output, so Verify
     # builds then too.
     if: ${{ !cancelled() && !github.event.pull_request.draft }}
-    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && 'nscloud-ubuntu-24.04-amd64-4x8' || 'ubuntu-latest' }}
+    # A private repository's build runs on a Namespace 4x8 with a cache volume.
+    # A tag holds only [a-z0-9.-], which every repository name here matches.
+    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"]', github.event.repository.name, inputs.cache-size)) || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -166,9 +178,26 @@ jobs:
           # A crate's test fixtures may live in a submodule; with none, this
           # checks out nothing more.
           submodules: true
-      # The mise cache stays off on Namespace: a restored cache keeps mise's
-      # Rust record without rustup's components, and every Namespace runner
-      # starts empty.
+      # The volume is mounted at /cache; the action bind-mounts each path into
+      # it, so every later step reads and writes the volume. mise's installs
+      # and rustup's toolchains share it, so the mise record of Rust and
+      # rustup's components never come apart. A job that exits cleanly
+      # commits the volume, whatever its steps' results; the next job forks
+      # the newest commit on its node.
+      - name: Mount the cache volume
+        if: needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted'
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        with:
+          path: |
+            ~/.local/share/mise
+            ~/.rustup
+            ~/.cargo
+            ~/.cache/mbx
+            ${{ github.workspace }}/${{ inputs.working-directory }}/target
+      # The GitHub mise cache is for GitHub-hosted runners only; a Namespace
+      # runner keeps its installs on the volume.
       #
       # One stalled rustup download once held this step to its limit, with no
       # room for rustup's own retry. The download timeout applies to each
@@ -185,7 +214,7 @@ jobs:
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
-          cache: ${{ !github.event.repository.private }}
+          cache: ${{ runner.environment == 'github-hosted' }}
       - name: Install locked toolchain (retry)
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
@@ -195,7 +224,7 @@ jobs:
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
-          cache: ${{ !github.event.repository.private }}
+          cache: ${{ runner.environment == 'github-hosted' }}
       # A documentation-only pull request: the repository's tools without the
       # Rust toolchain, then the documentation checks it defines. The mise
       # cache stays off, so this run never saves a cache without Rust that a
@@ -253,7 +282,7 @@ jobs:
       # removes the Cargo target before exporting. With it kept, a's 24.5 GB
       # target left 15.8 GB free, and the 20 GB export failed with ENOSPC.
       - name: Cache builds with mbx
-        if: needs.changes.outputs.build != 'false'
+        if: needs.changes.outputs.build != 'false' && runner.environment == 'github-hosted'
         continue-on-error: true
         timeout-minutes: 7
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
@@ -269,6 +298,16 @@ jobs:
           # saves nothing.
           save-on-workflow-dispatch: true
           clean-target-before-export: true
+      # On a cache volume mbx's store is already in place: the local backend
+      # only sets mbx up, with no restore or export.
+      - name: Cache builds with mbx on the volume
+        if: needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          backend: local
       - name: Verify
         if: needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -290,3 +329,28 @@ jobs:
         if: inputs.semver && needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
         run: mise x -- cargo package --locked --all-features --workspace
+      # A generation larger than the volume still commits, but the next job
+      # starts from an empty volume, so the job trims what it leaves behind.
+      # The largest workspace here measured a 24.5 GB target/ and a 13 to 20 GB
+      # mbx bundle: mbx keeps a
+      # third of the volume, target/ is removed once it passes half, and the
+      # toolchains and Cargo's home take what is left. A fresh checkout makes
+      # Cargo rebuild every workspace crate anyway, which mbx serves; target/
+      # keeps the dependencies' units fresh.
+      - name: Trim the cache volume
+        if: ${{ !cancelled() && needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted' }}
+        continue-on-error: true
+        timeout-minutes: 3
+        shell: bash
+        env:
+          SIZE_GB: ${{ inputs.cache-size }}
+        run: |
+          MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
+          limit=$((SIZE_GB * 1000000000 / 2))
+          if [ -d target ] && [ "$(du -sb target | cut -f1)" -gt "$limit" ]; then
+            # target/ is a mount point, so only its contents go.
+            echo "target/ is over $((SIZE_GB / 2)) GB, so its contents are removed."
+            find target -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          fi
+          du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target 2>/dev/null || true
+          df -h /cache

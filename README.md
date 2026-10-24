@@ -92,8 +92,15 @@ It checks out the repository with its submodules, installs the locked tools
 with mise, restores mbx's compiled objects, and runs `mise run verify` with
 `MISE_ENV=ci` and git's first branch set to `main`.
 A cache step that fails, such as a save refused because the commit's key is already reserved on a re-run, does not fail the job: the result comes from the build and tests.
-The mise install cache is on for GitHub-hosted runners and off on Namespace,
-where a restored cache lacks rustup's components.
+The build cache follows the runner the job lands on, and no input chooses it.
+On Namespace the job runs with a cache volume tagged `rust-<repository>`,
+sized by `cache-size`, and keeps mise's installs, rustup's toolchains, Cargo's
+home, `target/`, and mbx's store on it; the job commits the volume when it
+exits cleanly, and the next job forks the newest commit.
+A last step keeps the volume under its size: `mbx gc` holds the store to a
+third of it, and `target/` is emptied once it passes half.
+On a GitHub-hosted runner the job restores the mise install cache and mbx's
+objects from the GitHub Actions cache instead.
 Each step has its own time limit and the job has none, so the job ends within
 their sum.
 The mbx step's 7 minutes apply to the restore and to the export separately,
@@ -124,6 +131,7 @@ stays current.
 | `advisories` | `true` | Runs `mise run deny:advisories` after `verify` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
+| `cache-size` | `50` | Size in GB of the Namespace cache volume a private repository's build mounts |
 
 ## Check the template version
 
