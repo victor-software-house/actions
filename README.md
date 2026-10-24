@@ -97,8 +97,11 @@ On Namespace the job runs with a cache volume tagged `rust-<repository>`,
 sized by `cache-size`, and keeps mise's installs, rustup's toolchains, Cargo's
 home, `target/`, and mbx's store on it; the job commits the volume when it
 exits cleanly, and the next job forks the newest commit.
+A pull request reads the volume and never commits it, so only reviewed code
+(a push, a merge queue run, a dispatch) writes the toolchains and the store
+that every later build runs.
 A last step keeps the volume under its size: `mbx gc` holds the store to a
-third of it, and `target/` is emptied once it passes half.
+third of it after a passing build, and `target/` is emptied once it passes half.
 On a GitHub-hosted runner the job restores the mise install cache and mbx's
 objects from the GitHub Actions cache instead.
 Each step has its own time limit and the job has none, so the job ends within
