@@ -21,6 +21,9 @@
 #         issues: write
 #       with:
 #         mise-version: <mise version>
+#         paths: |
+#           .copier-answers.yml
+#           <each file the template renders>
 #       secrets:
 #         TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 #
@@ -32,6 +35,10 @@
 # tag as a notice, so a new tag fails no unrelated pull request. A push or a
 # scheduled run keeps one open issue per working directory while the newest
 # tag would change the repository, and closes it once nothing is left to take.
+#
+# With paths, a pull request that touches none of them skips the check: no
+# such change can drift from the template. The skipped job still reports, so
+# a branch rule that requires the check passes.
 name: Template check
 
 on:
@@ -45,6 +52,10 @@ on:
         description: The directory that holds .copier-answers.yml and its mise.toml
         type: string
         default: .
+      paths:
+        description: Newline-separated globs of the files the template renders; a pull request that changes none of them skips the check. Empty checks every pull request
+        type: string
+        default: ""
     secrets:
       TEMPLATES_APP_PRIVATE_KEY:
         description: The private key of the App that reads the template; its client id is the TEMPLATES_APP_CLIENT_ID variable
@@ -58,12 +69,65 @@ env:
   MISE_ENV: ci
 
 jobs:
+  # Whether a pull request touches a file the template renders. git's glob
+  # pathspec matches as GitHub's paths filters do: * stays within one
+  # directory, ** crosses them.
+  changes:
+    name: Changes
+    if: github.event_name == 'pull_request' && inputs.paths != '' && !github.event.pull_request.draft
+    # A shallow checkout and one diff: a GitHub-hosted runner, which bills no
+    # Namespace units, whatever the visibility.
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      template: ${{ steps.diff.outputs.template }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # A pull request checks out its merge commit; its first parent is
+          # the base branch.
+          fetch-depth: 2
+      - name: Diff the template's files
+        id: diff
+        shell: bash
+        env:
+          PATHS: ${{ inputs.paths }}
+          DIRECTORY: ${{ inputs.working-directory }}
+        run: |
+          specs=()
+          while IFS= read -r path; do
+            # A stray space or carriage return would match no file and skip
+            # the check.
+            path=${path%$'\r'}
+            path=${path#"${path%%[![:space:]]*}"}
+            path=${path%"${path##*[![:space:]]}"}
+            if [ -n "$path" ]; then
+              specs+=(":(glob)${DIRECTORY%/}/$path")
+            fi
+          done <<<"$PATHS"
+          if git diff --quiet HEAD^1 HEAD -- "${specs[@]}"; then
+            echo "template=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "template=true" >>"$GITHUB_OUTPUT"
+          fi
+
   template:
     name: Template
+    needs: changes
     # A pull request from a fork gets no secrets and cannot read the template,
     # so the check is skipped there instead of failing. A draft pull request
     # runs no check; marking it ready starts the run.
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && !github.event.pull_request.draft
+    # A pull request with paths runs only when Changes found one; a failed
+    # Changes leaves no output and the check runs.
+    if: >-
+      !cancelled()
+      && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+      && !github.event.pull_request.draft
+      && (github.event_name != 'pull_request' || inputs.paths == '' || needs.changes.outputs.template != 'false')
     # GitHub checks these against the caller's grant when the run starts,
     # whatever the event, so a caller grants issues: write in the same change
     # that moves its pin to this workflow.
