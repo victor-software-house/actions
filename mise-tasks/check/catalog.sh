@@ -20,7 +20,7 @@ expect() {
     exit 1
   fi
 }
-diff <(yq -p toml -o json 'del(.verify, .format, .test.run, .["test:doc"].run, .["check:versions"].run, .semver.run) | sort_keys(.)' "$src") <(yq -p toml -o json 'del(.format, .doc, .["check:docs"], .test.run, .["test:doc"].run, .["test:doc"].env, .["check:versions"].run, .semver.run) | sort_keys(.)' "$catalog")
+diff <(yq -p toml -o json 'del(.verify, .format, .test.run, .["test:doc"].run, .["check:versions"].run, .semver.run) | sort_keys(.)' "$src") <(yq -p toml -o json 'del(.format, .doc, .["check:docs"], .test.run, .["test:doc"].run, .["test:doc"].env.CARGO_TARGET_DIR, .["check:versions"].run, .semver.run) | del(.["test:doc"].env | select(length == 0)) | sort_keys(.)' "$catalog")
 expect '.format.run' 'cargo ${RUSTFMT_TOOLCHAIN:-} fmt --all -- --check'
 expect '.test.run' 'cargo test --locked --workspace --all-features --tests --no-fail-fast'
 expect '.["test:doc"].run' 'cargo test --locked --workspace --doc --all-features --no-fail-fast'
