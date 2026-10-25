@@ -146,19 +146,21 @@ With `semver`, every pull request builds: `cargo package` ships documentation
 files, and the `Package` step checks it.
 The `Verify` check reports a result either way.
 
-The jobs, which run in parallel after `Changes`:
+The jobs, which run in parallel after `Changes` and `Runner`:
 
 | Job | Runner | Runs |
 |:--|:--|:--|
 | `Build and test` | from `runner`; Namespace runners mount the cache volume | `mise run verify`, whose dependencies mise runs in parallel in the one VM |
 | `Static checks` | light | whichever of `check:toolchain`, `format`, `deny`, `deps`, `lint:typos`, `lint:md` and `specs` the repository defines, then `deny:advisories`; nothing compiles, so a failure reports in about a minute |
 | `Publish checks` | as the build job, with the volume read-only | with `semver`: `mise run semver` and `cargo package` |
-| `Runner` | light | resolves the `runner` input to a machine, or fails on an unknown value before any build starts |
+| `Runner` | light | resolves the `runner` input to a machine, or fails on an unknown value before any build starts, and outputs the runner of every job above, so each rule lives in one place |
 | `Verify` | light | fails when a job above failed or was cancelled, passes when one was skipped by its own condition |
 
 A light runner is `ubuntu-latest` in a public repository, where it is free, and
 Namespace `2x4` in a private one, where GitHub-hosted minutes count against
 the organization's quota.
+`Changes` and `Runner` pick theirs inline, because they run first, and
+`Verify` repeats the rule as a fallback for a failed `Runner`.
 
 A ruleset requires only `Verify` (`verify / Verify` from a caller job named
 `verify`), so the jobs behind it can change without a ruleset change, and an
