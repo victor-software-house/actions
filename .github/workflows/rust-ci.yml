@@ -102,9 +102,11 @@ jobs:
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-    # One API call and a checkout to search: no build, so a GitHub-hosted
-    # runner, which bills no Namespace units, whatever the visibility.
-    runs-on: ubuntu-latest
+    # One API call and a checkout to search: no build. A private repository
+    # runs it on the smallest Namespace shape, because GitHub-hosted minutes
+    # in a private repository count against a quota; a public one runs it
+    # GitHub-hosted, free.
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
       contents: read
@@ -166,7 +168,8 @@ jobs:
   runner:
     name: Runner
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
+    # Light jobs follow the Changes job: Namespace 2x4 when private.
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     outputs:
       shape: ${{ steps.pick.outputs.shape }}
@@ -210,7 +213,10 @@ jobs:
     # experiment dispatched on its own branch, would hand its state to the
     # next build of the default branch. The GitHub cache needs no such rule:
     # it scopes a branch's saves to that branch.
-    runs-on: ${{ needs.runner.outputs.shape != 'github' && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, (github.event_name != 'merge_group' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) && ',"nscloud-cache-exp-do-not-commit"' || '', needs.runner.outputs.shape)) || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.shape != 'github' && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, (github.event_name != 'merge_group' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) && ',"nscloud-cache-exp-do-not-commit"' || '', needs.runner.outputs.shape)) || (needs.runner.outputs.shape != 'github' && github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest') }}
+    # A documentation-only pull request builds nothing, so it takes a light
+    # runner: Namespace 2x4 when private, GitHub-hosted when public or when
+    # the runner input asks for github-hosted.
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -476,15 +482,15 @@ jobs:
           du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target
           df -h /cache
 
-  # The checks that compile nothing, on a GitHub-hosted runner for every
-  # repository, so a formatting, policy or spelling failure reports in about
-  # a minute instead of after the build. The build job's verify task runs the
-  # same tasks again; each takes seconds there.
+  # The checks that compile nothing, on a light runner (GitHub-hosted when
+  # public, Namespace 2x4 when private), so a formatting, policy or spelling
+  # failure reports in about a minute instead of after the build. The build
+  # job's verify task runs the same tasks again; each takes seconds there.
   static:
     name: Static checks
     needs: changes
     if: ${{ !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     permissions:
       contents: read
     defaults:
@@ -633,7 +639,7 @@ jobs:
     name: Verify
     needs: [changes, runner, static, build, publish]
     if: ${{ always() && !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Report the jobs

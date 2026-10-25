@@ -134,12 +134,12 @@ The whole workspace still builds: building fewer packages resolves features
 per package and rebuilds dependencies the full build already has.
 
 A pull request that changes only documentation builds nothing.
-A `Changes` job on `ubuntu-latest` reads the changed paths with
+A `Changes` job on a light runner reads the changed paths with
 [dorny/paths-filter](https://github.com/dorny/paths-filter).
 Documentation is the root's Markdown files, `docs/`, and `openspec/`,
 except a file a Rust source names by its repository path, alone or at the
 end of a relative path, as a test or an `include_str!` that reads it does.
-For such a pull request, the build job runs on `ubuntu-latest`, installs the tools
+For such a pull request, the build job runs on a light runner, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
 repository defines.
 With `semver`, every pull request builds: `cargo package` ships documentation
@@ -151,10 +151,14 @@ The jobs, which run in parallel after `Changes`:
 | Job | Runner | Runs |
 |:--|:--|:--|
 | `Build and test` | from `runner`; Namespace runners mount the cache volume | `mise run verify`, whose dependencies mise runs in parallel in the one VM |
-| `Static checks` | `ubuntu-latest` | whichever of `check:toolchain`, `format`, `deny`, `deps`, `lint:typos`, `lint:md` and `specs` the repository defines, then `deny:advisories`; nothing compiles, so a failure reports in about a minute |
+| `Static checks` | light | whichever of `check:toolchain`, `format`, `deny`, `deps`, `lint:typos`, `lint:md` and `specs` the repository defines, then `deny:advisories`; nothing compiles, so a failure reports in about a minute |
 | `Publish checks` | as the build job, with the volume read-only | with `semver`: `mise run semver` and `cargo package` |
-| `Runner` | `ubuntu-latest` | resolves the `runner` input to a machine, or fails on an unknown value before any build starts |
-| `Verify` | `ubuntu-latest` | fails when a job above failed or was cancelled, passes when one was skipped by its own condition |
+| `Runner` | light | resolves the `runner` input to a machine, or fails on an unknown value before any build starts |
+| `Verify` | light | fails when a job above failed or was cancelled, passes when one was skipped by its own condition |
+
+A light runner is `ubuntu-latest` in a public repository, where it is free, and
+Namespace `2x4` in a private one, where GitHub-hosted minutes count against
+the organization's quota.
 
 A ruleset requires only `Verify` (`verify / Verify` from a caller job named
 `verify`), so the jobs behind it can change without a ruleset change, and an
@@ -248,7 +252,7 @@ root, and skips a pull request from a fork, which gets no secrets.
 `paths` lists the files the template renders, one glob per line, relative to
 `working-directory`.
 A pull request that changes none of them skips the check: a `Changes` job on
-`ubuntu-latest` diffs the merge commit against its base with git's glob
+a light runner diffs the merge commit against its base with git's glob
 pathspecs, where `*` stays within one directory and `**` crosses them.
 The skipped `Template` job still reports, so a branch rule that requires
 `template / Template` passes.
