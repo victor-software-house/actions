@@ -205,12 +205,15 @@ jobs:
     if: ${{ !cancelled() && !github.event.pull_request.draft && needs.runner.result == 'success' }}
     # A build on a Namespace runner mounts a cache volume; see the runner input.
     # A tag holds only [a-z0-9.-], which every repository name here matches.
-    # A pull request reads the volume but never commits it: the toolchains,
-    # Cargo's home and mbx's store it holds are run by every later build,
-    # releases included, so only code that already passed review (a push, a
-    # merge queue run, a dispatch) writes them, as the GitHub cache saves only
-    # from the default branch.
-    runs-on: ${{ needs.runner.outputs.shape != 'github' && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '', needs.runner.outputs.shape)) || (needs.runner.outputs.shape != 'github' && github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest') }}
+    # Only a merge queue run, or a push, dispatch or schedule run on the
+    # default branch, commits the volume; every other run reads it and never
+    # commits it. The toolchains, Cargo's home and mbx's store it holds are
+    # run by every later build, releases included, and one volume serves
+    # every branch, so a pull request or a run on another branch, such as an
+    # experiment dispatched on its own branch, would hand its state to the
+    # next build of the default branch. The GitHub cache needs no such rule:
+    # it scopes a branch's saves to that branch.
+    runs-on: ${{ needs.runner.outputs.shape != 'github' && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, (github.event_name != 'merge_group' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) && ',"nscloud-cache-exp-do-not-commit"' || '', needs.runner.outputs.shape)) || (needs.runner.outputs.shape != 'github' && github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest') }}
     # A documentation-only pull request builds nothing, so it takes a light
     # runner: Namespace 2x4 when private, GitHub-hosted when public or when
     # the runner input asks for github-hosted.
