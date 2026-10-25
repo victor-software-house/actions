@@ -64,6 +64,18 @@ on:
         description: Size in GB of the Namespace cache volume a private repository's build mounts
         type: number
         default: 50
+      runner-size:
+        description: Trial only. The Namespace runner shape, such as 4x8 or 8x16
+        type: string
+        default: 4x8
+      cache-tag:
+        description: Trial only. A cache volume tag that replaces rust-<repository>, for a cold run
+        type: string
+        default: ""
+      partitions:
+        description: Trial only. Runs this many Verify jobs, each with one nextest slice
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -150,6 +162,10 @@ jobs:
   verify:
     name: Verify
     needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: ${{ fromJSON(inputs.partitions == 2 && '[1,2]' || '[1]') }}
     # A draft pull request runs no CI; marking it ready starts the run. A push
     # skips Changes and builds. A failed Changes leaves no output, so Verify
     # builds then too.
@@ -161,7 +177,7 @@ jobs:
     # releases included, so only code that already passed review (a push, a
     # merge queue run, a dispatch) writes them, as the GitHub cache saves only
     # from the default branch.
-    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '')) || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-{0}","nscloud-cache-size-{1}gb"{2}]', (inputs.cache-tag && format('{0}-p{1}', inputs.cache-tag, matrix.slice) || format('rust-{0}', github.event.repository.name)), inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '', inputs.runner-size)) || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -385,6 +401,7 @@ jobs:
         timeout-minutes: ${{ inputs.timeout-minutes }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          NEXTEST_PARTITION: ${{ inputs.partitions > 1 && format('slice:{0}/{1}', matrix.slice, inputs.partitions) || '' }}
         run: mise run verify
       - name: Advisories
         if: inputs.advisories && needs.changes.outputs.build != 'false'
