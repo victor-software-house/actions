@@ -13,6 +13,7 @@ only the line that pins it.
 | `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: a `Verify` job that runs `mise run verify`, then the network checks, or only the documentation checks for a documentation-only pull request |
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
+| `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
 
 ## Use the Rust catalog
 
@@ -227,6 +228,32 @@ The skipped `Template` job still reports, so a branch rule that requires
 `template / Template` passes.
 Pushes and scheduled runs always check.
 Without `paths`, every pull request checks.
+
+## Scan for credentials
+
+The caller runs on pull requests and daily, and calls the scan by commit:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: "47 9 * * *"
+
+jobs:
+  secrets:
+    uses: victor-software-house/actions/.github/workflows/secrets.yml@<commit> # <tag>
+    with:
+      mise-version: 2026.10.17
+```
+
+A pull request scans only its own commits, from its base to its head; a
+scheduled or dispatched run scans the whole history.
+The repository's pre-push hook scans only the commits it pushes, so the
+whole history is scanned here once a day, not on every push.
+The job installs gitleaks from the caller's `mise.dev.toml` and runs the
+caller's `hooks:secrets:history` task, which passes its arguments to
+`gitleaks git`, with `MISE_ENV=dev,hooks`.
 
 ## Turn a template piece off or on
 
