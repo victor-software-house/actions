@@ -29,9 +29,9 @@
 # GitHub-hosted runner restores the mise install cache and mbx's objects from
 # the GitHub Actions cache.
 #
-# A pull request that changes only documentation builds nothing: Verify runs
-# the documentation checks on a GitHub-hosted runner instead, under the same
-# check name, so the check still reports. A push always builds, so the build
+# A pull request that changes only documentation builds nothing: the build
+# job runs the documentation checks on a GitHub-hosted runner instead, and
+# the Verify job still reports. A push always builds, so the build
 # cache, saved only from the default branch, stays current; a caller with a
 # merge queue has no push run and refreshes it through a workflow_dispatch
 # run on the default branch instead.
@@ -147,11 +147,14 @@ jobs:
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"
 
-  verify:
-    name: Verify
+  # The repository's own verify task, whose dependencies mise already runs in
+  # parallel inside this one VM. Publish checks and static checks run beside
+  # it in their own jobs, and the Verify job below reports all of them.
+  build:
+    name: Build and test
     needs: changes
     # A draft pull request runs no CI; marking it ready starts the run. A push
-    # skips Changes and builds. A failed Changes leaves no output, so Verify
+    # skips Changes and builds. A failed Changes leaves no output, so this job
     # builds then too.
     if: ${{ !cancelled() && !github.event.pull_request.draft }}
     # A private repository's build runs on a Namespace 4x8 with a cache volume.
@@ -386,21 +389,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: mise run verify
-      - name: Advisories
-        if: inputs.advisories && needs.changes.outputs.build != 'false'
-        timeout-minutes: 2
-        run: mise run deny:advisories
-      # Compares the public API with the last release on crates.io.
-      - name: Semver
-        if: inputs.semver && needs.changes.outputs.build != 'false'
-        timeout-minutes: ${{ inputs.timeout-minutes }}
-        run: mise run semver
-      # --workspace packages every member of a workspace, and the one package
-      # of a single crate.
-      - name: Package
-        if: inputs.semver && needs.changes.outputs.build != 'false'
-        timeout-minutes: ${{ inputs.timeout-minutes }}
-        run: mise x -- cargo package --locked --all-features --workspace
       # A generation larger than the volume still commits, but the next job
       # starts from an empty volume, so the job trims what it leaves behind.
       # The largest workspace here measured a 24.5 GB target/ and a 13 to 20 GB
@@ -441,3 +429,173 @@ jobs:
           fi
           du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target
           df -h /cache
+
+  # The checks that compile nothing, on a GitHub-hosted runner for every
+  # repository, so a formatting, policy or spelling failure reports in about
+  # a minute instead of after the build. The build job's verify task runs the
+  # same tasks again; each takes seconds there.
+  static:
+    name: Static checks
+    needs: changes
+    if: ${{ !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check out repository
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Install locked toolchain
+        timeout-minutes: 5
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        env:
+          RUSTUP_DOWNLOAD_TIMEOUT: "30"
+        with:
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache: true
+      # Each task runs when the repository defines it, and every one runs
+      # even after another fails, so one run reports them all.
+      - name: Static checks
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          failed=()
+          for task in check:toolchain format deny deps lint:typos lint:md specs; do
+            if ! mise tasks info "$task" >/dev/null 2>&1; then
+              continue
+            fi
+            echo "::group::mise run $task"
+            mise run "$task" || failed+=("$task")
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::Failed: ${failed[*]}"
+            exit 1
+          fi
+      - name: Advisories
+        if: inputs.advisories
+        timeout-minutes: 2
+        run: mise run deny:advisories
+
+  # A published crate's semver comparison and cargo package, beside the build
+  # instead of after it. The job never writes the build cache: on a Namespace
+  # runner it mounts the volume read-only on every event, because parallel
+  # jobs that commit one tag overwrite each other (last write wins, no merge),
+  # and on a GitHub-hosted runner it saves under its own key suffix, so it
+  # never races the build job for one key.
+  publish:
+    name: Publish checks
+    needs: changes
+    if: ${{ inputs.semver && !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
+    runs-on: ${{ github.event.repository.private && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb","nscloud-cache-exp-do-not-commit"]', github.event.repository.name, inputs.cache-size)) || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check out repository
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Mount the cache volume
+        if: runner.environment != 'github-hosted'
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        with:
+          path: |
+            ~/.local/share/mise
+            ~/.rustup
+            ~/.cargo
+            ~/.cache/mbx
+            ${{ github.workspace }}/${{ inputs.working-directory }}/target
+      - name: Install locked toolchain
+        id: toolchain
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        env:
+          RUSTUP_DOWNLOAD_TIMEOUT: "30"
+        with:
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache: ${{ runner.environment == 'github-hosted' }}
+      - name: Install locked toolchain (retry)
+        if: steps.toolchain.outcome == 'failure'
+        timeout-minutes: 5
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        env:
+          RUSTUP_DOWNLOAD_TIMEOUT: "30"
+        with:
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache: ${{ runner.environment == 'github-hosted' }}
+      # Restores the newest objects under the shared prefix, the build job's
+      # included, and saves its own entry from the default branch.
+      - name: Cache builds with mbx
+        if: runner.environment == 'github-hosted'
+        continue-on-error: true
+        timeout-minutes: 7
+        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          github-cache-mode: objects
+          isolate-objects-cache: true
+          cache-key-suffix: publish
+          save-on-workflow-dispatch: true
+          clean-target-before-export: true
+      - name: Cache builds with mbx on the volume
+        if: runner.environment != 'github-hosted'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          backend: local
+      # Compares the public API with the last release on crates.io.
+      - name: Semver
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        run: mise run semver
+      # --workspace packages every member of a workspace, and the one package
+      # of a single crate.
+      - name: Package
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        run: mise x -- cargo package --locked --all-features --workspace
+
+  # The one check a ruleset requires: it reports on every pull request and
+  # merge queue run, and fails when any job it needs failed or was cancelled.
+  # A job skipped by its own condition (a documentation-only pull request, a
+  # crate with semver off) counts as passing. With only a downstream job
+  # required, an upstream failure would skip it and read as green; this job
+  # runs always() so that cannot happen, and its name keeps the required
+  # check `verify / Verify` while the jobs behind it change.
+  verify:
+    name: Verify
+    needs: [changes, static, build, publish]
+    if: ${{ always() && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report the jobs
+        shell: bash
+        env:
+          STATIC: ${{ needs.static.result }}
+          BUILD: ${{ needs.build.result }}
+          PUBLISH: ${{ needs.publish.result }}
+        run: |
+          echo "Static checks: $STATIC; Build and test: $BUILD; Publish checks: $PUBLISH"
+          for result in "$STATIC" "$BUILD" "$PUBLISH"; do
+            if [ "$result" = failure ] || [ "$result" = cancelled ]; then
+              exit 1
+            fi
+          done
