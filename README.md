@@ -91,8 +91,9 @@ The build and publish jobs run where the `runner` input says. Its default,
 `cheapest`, reads the calling repository's visibility: `ubuntu-latest` for a
 public repository, free there, and a Namespace 4x8 for a private one, at
 US$0.004 a minute on the plan against US$0.006 for a GitHub-hosted runner on
-a private repository. `github-hosted`, `namespace-4x8` and `namespace-8x16`
-choose one outright; `Verify` fails on any other value.
+a private repository. `github-hosted`, `namespace-4x8`, `namespace-8x16` and `namespace-16x32` choose one outright.
+A `Runner` job resolves the value first, so any other value fails before a
+build takes a runner.
 It checks out the repository with its submodules, installs the locked tools
 with mise, restores mbx's compiled objects, and runs `mise run verify` with
 `MISE_ENV=ci` and git's first branch set to `main`.
@@ -151,6 +152,7 @@ The jobs, which run in parallel after `Changes`:
 | `Build and test` | from `runner`; Namespace runners mount the cache volume | `mise run verify`, whose dependencies mise runs in parallel in the one VM |
 | `Static checks` | `ubuntu-latest` | whichever of `check:toolchain`, `format`, `deny`, `deps`, `lint:typos`, `lint:md` and `specs` the repository defines, then `deny:advisories`; nothing compiles, so a failure reports in about a minute |
 | `Publish checks` | as the build job, with the volume read-only | with `semver`: `mise run semver` and `cargo package` |
+| `Runner` | `ubuntu-latest` | resolves the `runner` input to a machine, or fails on an unknown value before any build starts |
 | `Verify` | `ubuntu-latest` | fails when a job above failed or was cancelled, passes when one was skipped by its own condition |
 
 A ruleset requires only `Verify` (`verify / Verify` from a caller job named
@@ -171,7 +173,7 @@ stays current.
 | `advisories` | `true` | Runs `mise run deny:advisories` in `Static checks` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
-| `runner` | `cheapest` | Where `Build and test` and `Publish checks` run: `cheapest`, `github-hosted`, `namespace-4x8` or `namespace-8x16` |
+| `runner` | `cheapest` | Where `Build and test` and `Publish checks` run: `cheapest`, `github-hosted`, `namespace-4x8`, `namespace-8x16` or `namespace-16x32` |
 | `cache-size` | `50` | Size in GB of the Namespace cache volume a build on a Namespace runner mounts |
 
 ## Check the template version
