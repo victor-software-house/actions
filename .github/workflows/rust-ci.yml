@@ -452,6 +452,7 @@ jobs:
           persist-credentials: false
           submodules: true
       - name: Install locked toolchain
+        id: toolchain
         timeout-minutes: 5
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         env:
@@ -479,9 +480,11 @@ jobs:
             echo "::error::Failed: ${failed[*]}"
             exit 1
           fi
-      # Runs even when a static check failed, so one run reports both.
+      # Runs even when a static check failed, so one run reports both, but
+      # not when setup failed: without the toolchain it would only repeat
+      # that failure under another name.
       - name: Advisories
-        if: ${{ !cancelled() && inputs.advisories }}
+        if: ${{ !cancelled() && inputs.advisories && steps.toolchain.outcome == 'success' }}
         timeout-minutes: 2
         run: mise run deny:advisories
 
