@@ -479,8 +479,9 @@ jobs:
             echo "::error::Failed: ${failed[*]}"
             exit 1
           fi
+      # Runs even when a static check failed, so one run reports both.
       - name: Advisories
-        if: inputs.advisories
+        if: ${{ !cancelled() && inputs.advisories }}
         timeout-minutes: 2
         run: mise run deny:advisories
 
