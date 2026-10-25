@@ -19,9 +19,12 @@
 # The caller owns concurrency: one group per branch, cancelling the run a new
 # push replaces.
 #
-# The github context here is the caller's, so the runner follows the caller's
-# visibility: GitHub-hosted for a public repository, free there and measured
-# faster for these crates, and the Namespace runner for a private one.
+# The caller picks where the build and publish jobs run with the runner
+# input. Its default, cheapest, follows the caller's visibility (the github
+# context here is the caller's): GitHub-hosted for a public repository, free
+# there and measured faster for these crates, and a Namespace 4x8 for a
+# private one, cheaper per minute than a GitHub-hosted runner on a private
+# repository. The other jobs need no build and always run GitHub-hosted.
 #
 # The build cache follows the runner the job lands on, with no input: a
 # Namespace runner mounts a cache volume tagged rust-<repository> that keeps
@@ -60,8 +63,15 @@ on:
         description: Cancels a hung Verify, Semver or Package step
         type: number
         default: 8
+      runner:
+        description: >-
+          Where the build and publish jobs run: cheapest (GitHub-hosted for a
+          public repository, a Namespace 4x8 for a private one), github-hosted,
+          namespace-4x8, namespace-8x16, or namespace-16x32
+        type: string
+        default: cheapest
       cache-size:
-        description: Size in GB of the Namespace cache volume a private repository's build mounts
+        description: Size in GB of the Namespace cache volume a build on a Namespace runner mounts
         type: number
         default: 50
 
@@ -150,21 +160,54 @@ jobs:
   # The repository's own verify task, whose dependencies mise already runs in
   # parallel inside this one VM. Publish checks and static checks run beside
   # it in their own jobs, and the Verify job below reports all of them.
+  # Resolves the runner input before any job takes a runner, so a bad value
+  # fails here instead of building on a runner nobody chose. shape is github
+  # or a Namespace machine shape.
+  runner:
+    name: Runner
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      shape: ${{ steps.pick.outputs.shape }}
+    steps:
+      - name: Resolve the runner input
+        id: pick
+        shell: bash
+        env:
+          RUNNER: ${{ inputs.runner }}
+          PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          case "$RUNNER" in
+            cheapest) if [ "$PRIVATE" = true ]; then shape=4x8; else shape=github; fi ;;
+            github-hosted) shape=github ;;
+            namespace-4x8) shape=4x8 ;;
+            namespace-8x16) shape=8x16 ;;
+            namespace-16x32) shape=16x32 ;;
+            *)
+              echo "::error::Unknown runner '$RUNNER': use cheapest, github-hosted, namespace-4x8, namespace-8x16 or namespace-16x32"
+              exit 1
+              ;;
+          esac
+          echo "Runner '$RUNNER' resolves to $shape"
+          echo "shape=$shape" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build and test
-    needs: changes
+    needs: [changes, runner]
     # A draft pull request runs no CI; marking it ready starts the run. A push
     # skips Changes and builds. A failed Changes leaves no output, so this job
-    # builds then too.
-    if: ${{ !cancelled() && !github.event.pull_request.draft }}
-    # A private repository's build runs on a Namespace 4x8 with a cache volume.
+    # builds then too. A failed Runner leaves no shape, so this job never runs
+    # then.
+    if: ${{ !cancelled() && !github.event.pull_request.draft && needs.runner.result == 'success' }}
+    # A build on a Namespace runner mounts a cache volume; see the runner input.
     # A tag holds only [a-z0-9.-], which every repository name here matches.
     # A pull request reads the volume but never commits it: the toolchains,
     # Cargo's home and mbx's store it holds are run by every later build,
     # releases included, so only code that already passed review (a push, a
     # merge queue run, a dispatch) writes them, as the GitHub cache saves only
     # from the default branch.
-    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '')) || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.shape != 'github' && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '', needs.runner.outputs.shape)) || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -496,9 +539,9 @@ jobs:
   # never races the build job for one key.
   publish:
     name: Publish checks
-    needs: changes
-    if: ${{ inputs.semver && !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
-    runs-on: ${{ github.event.repository.private && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb","nscloud-cache-exp-do-not-commit"]', github.event.repository.name, inputs.cache-size)) || 'ubuntu-latest' }}
+    needs: [changes, runner]
+    if: ${{ inputs.semver && !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' && needs.runner.result == 'success' }}
+    runs-on: ${{ needs.runner.outputs.shape != 'github' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{2}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb","nscloud-cache-exp-do-not-commit"]', github.event.repository.name, inputs.cache-size, needs.runner.outputs.shape)) || 'ubuntu-latest' }}
     permissions:
       contents: read
     defaults:
@@ -585,7 +628,7 @@ jobs:
   # check `verify / Verify` while the jobs behind it change.
   verify:
     name: Verify
-    needs: [changes, static, build, publish]
+    needs: [changes, runner, static, build, publish]
     if: ${{ always() && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -593,12 +636,15 @@ jobs:
       - name: Report the jobs
         shell: bash
         env:
+          RUNNER: ${{ needs.runner.result }}
           STATIC: ${{ needs.static.result }}
           BUILD: ${{ needs.build.result }}
           PUBLISH: ${{ needs.publish.result }}
+        # A failed Runner skips the build and publish jobs, so its own result
+        # counts here.
         run: |
-          echo "Static checks: $STATIC; Build and test: $BUILD; Publish checks: $PUBLISH"
-          for result in "$STATIC" "$BUILD" "$PUBLISH"; do
+          echo "Runner: $RUNNER; Static checks: $STATIC; Build and test: $BUILD; Publish checks: $PUBLISH"
+          for result in "$RUNNER" "$STATIC" "$BUILD" "$PUBLISH"; do
             if [ "$result" = failure ] || [ "$result" = cancelled ]; then
               exit 1
             fi
