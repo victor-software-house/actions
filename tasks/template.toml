@@ -10,10 +10,14 @@
 # Each task declares its tools, so the including repository pins none of them;
 # `mise lock` records them in its lock. Copier runs through uvx, at the
 # version the template pins as "pypi:copier" in its own mise.toml.
+#
+# python stays at the version the template's repositories pin themselves.
+# When a repository pins another python, `mise install` (2026.10.18) drops
+# the task's version from mise.lock again, and the pre-push lock check fails.
 
 ["template:check"]
 description = "Fails when the newest template tag would change this repository"
-tools = { uv = "0.13.1", python = "3.14.8" }
+tools = { uv = "0.13.1", python = "3.15.0" }
 shell = "bash -c"
 # A newer tag that renders the same files passes with a notice: the
 # repository takes the new _commit with its next real template change.
@@ -79,7 +83,7 @@ fi
 ["template:off"]
 description = "Turns template pieces off and keeps their files, edited or not"
 usage = 'arg "<piece>" var=#true help="A piece to turn off, from the pieces or pieces_extra answer"'
-tools = { uv = "0.13.1", python = "3.14.8", yq = "4.54.1" }
+tools = { uv = "0.13.1", python = "3.15.0", yq = "4.54.1" }
 shell = "bash -c"
 # A plain copier update that drops a piece deletes the piece's files. This
 # task finds those files by rendering the recorded template version with and
@@ -135,7 +139,7 @@ printf '%s\n' ${paths[@]+"${paths[@]}"}
 ["template:on"]
 description = "Turns template pieces on, with conflict markers where the repository keeps its own file"
 usage = 'arg "<piece>" var=#true help="A piece to turn on, from the choices of the pieces or pieces_extra question"'
-tools = { uv = "0.13.1", python = "3.14.8", yq = "4.54.1" }
+tools = { uv = "0.13.1", python = "3.15.0", yq = "4.54.1" }
 shell = "bash -c"
 # copier update renders the pieces' files over the repository's. A file the
 # repository kept after template:off comes back with inline conflict markers
