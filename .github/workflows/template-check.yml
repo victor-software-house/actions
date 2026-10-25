@@ -75,9 +75,10 @@ jobs:
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && inputs.paths != '' && !github.event.pull_request.draft
-    # A shallow checkout and one diff: a GitHub-hosted runner, which bills no
-    # Namespace units, whatever the visibility.
-    runs-on: ubuntu-latest
+    # A shallow checkout and one diff. A private repository runs it on the
+    # smallest Namespace shape, because GitHub-hosted minutes in a private
+    # repository count against a quota; a public one runs it GitHub-hosted.
+    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
     timeout-minutes: 3
     permissions:
       contents: read
