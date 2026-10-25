@@ -19,9 +19,12 @@
 # The caller owns concurrency: one group per branch, cancelling the run a new
 # push replaces.
 #
-# The github context here is the caller's, so the runner follows the caller's
-# visibility: GitHub-hosted for a public repository, free there and measured
-# faster for these crates, and the Namespace runner for a private one.
+# The caller picks where the build and publish jobs run with the runner
+# input. Its default, cheapest, follows the caller's visibility (the github
+# context here is the caller's): GitHub-hosted for a public repository, free
+# there and measured faster for these crates, and a Namespace 4x8 for a
+# private one, cheaper per minute than a GitHub-hosted runner on a private
+# repository. The other jobs need no build and always run GitHub-hosted.
 #
 # The build cache follows the runner the job lands on, with no input: a
 # Namespace runner mounts a cache volume tagged rust-<repository> that keeps
@@ -60,8 +63,15 @@ on:
         description: Cancels a hung Verify, Semver or Package step
         type: number
         default: 8
+      runner:
+        description: >-
+          Where the build and publish jobs run: cheapest (GitHub-hosted for a
+          public repository, a Namespace 4x8 for a private one), github-hosted,
+          namespace-4x8, or namespace-8x16
+        type: string
+        default: cheapest
       cache-size:
-        description: Size in GB of the Namespace cache volume a private repository's build mounts
+        description: Size in GB of the Namespace cache volume a build on a Namespace runner mounts
         type: number
         default: 50
 
@@ -157,14 +167,14 @@ jobs:
     # skips Changes and builds. A failed Changes leaves no output, so this job
     # builds then too.
     if: ${{ !cancelled() && !github.event.pull_request.draft }}
-    # A private repository's build runs on a Namespace 4x8 with a cache volume.
+    # A build on a Namespace runner mounts a cache volume; see the runner input.
     # A tag holds only [a-z0-9.-], which every repository name here matches.
     # A pull request reads the volume but never commits it: the toolchains,
     # Cargo's home and mbx's store it holds are run by every later build,
     # releases included, so only code that already passed review (a push, a
     # merge queue run, a dispatch) writes them, as the GitHub cache saves only
     # from the default branch.
-    runs-on: ${{ github.event.repository.private && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '')) || 'ubuntu-latest' }}
+    runs-on: ${{ ((inputs.runner == 'cheapest' && github.event.repository.private) || startsWith(inputs.runner, 'namespace-')) && needs.changes.outputs.build != 'false' && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{3}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb"{2}]', github.event.repository.name, inputs.cache-size, github.event_name == 'pull_request' && ',"nscloud-cache-exp-do-not-commit"' || '', inputs.runner == 'namespace-8x16' && '8x16' || '4x8')) || 'ubuntu-latest' }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -498,7 +508,7 @@ jobs:
     name: Publish checks
     needs: changes
     if: ${{ inputs.semver && !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
-    runs-on: ${{ github.event.repository.private && fromJSON(format('["nscloud-ubuntu-24.04-amd64-4x8-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb","nscloud-cache-exp-do-not-commit"]', github.event.repository.name, inputs.cache-size)) || 'ubuntu-latest' }}
+    runs-on: ${{ ((inputs.runner == 'cheapest' && github.event.repository.private) || startsWith(inputs.runner, 'namespace-')) && fromJSON(format('["nscloud-ubuntu-24.04-amd64-{2}-with-cache","nscloud-cache-tag-rust-{0}","nscloud-cache-size-{1}gb","nscloud-cache-exp-do-not-commit"]', github.event.repository.name, inputs.cache-size, inputs.runner == 'namespace-8x16' && '8x16' || '4x8')) || 'ubuntu-latest' }}
     permissions:
       contents: read
     defaults:
@@ -590,6 +600,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # An unknown runner value falls back to GitHub-hosted in runs-on, so the
+      # required check names the mistake instead.
+      - name: Check the runner input
+        shell: bash
+        env:
+          RUNNER: ${{ inputs.runner }}
+        run: |
+          case "$RUNNER" in
+            cheapest | github-hosted | namespace-4x8 | namespace-8x16) ;;
+            *) echo "::error::Unknown runner '$RUNNER': use cheapest, github-hosted, namespace-4x8 or namespace-8x16"; exit 1 ;;
+          esac
       - name: Report the jobs
         shell: bash
         env:
