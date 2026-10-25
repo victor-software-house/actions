@@ -10,7 +10,7 @@ only the line that pins it.
 | Path | Holds |
 |:--|:--|
 | `tasks/rust.toml` | The standard Rust tasks: `check:toolchain`, `format`, `lint`, `test`, `test:doc`, `deny`, `deny:advisories`, `deps`, `check:versions`, `semver`, `doc`, and `check:docs` |
-| `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: a `Verify` job that runs `mise run verify`, then the network checks, or only the documentation checks for a documentation-only pull request |
+| `.github/workflows/rust-ci.yml` | The reusable Rust CI workflow: a build job that runs `mise run verify`, static and publish checks beside it, and one `Verify` job that reports them all |
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 | `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
@@ -133,12 +133,30 @@ A `Changes` job on `ubuntu-latest` reads the changed paths with
 Documentation is the root's Markdown files, `docs/`, and `openspec/`,
 except a file a Rust source names by its repository path, alone or at the
 end of a relative path, as a test or an `include_str!` that reads it does.
-For such a pull request, `Verify` runs on `ubuntu-latest`, installs the tools
+For such a pull request, the build job runs on `ubuntu-latest`, installs the tools
 without Rust, and runs whichever of `lint:md`, `lint:typos`, and `specs` the
 repository defines.
 With `semver`, every pull request builds: `cargo package` ships documentation
 files, and the `Package` step checks it.
-The check keeps its name and reports a result either way.
+The `Verify` check reports a result either way.
+
+The jobs, which run in parallel after `Changes`:
+
+| Job | Runner | Runs |
+|:--|:--|:--|
+| `Build and test` | Namespace 4x8 with the cache volume for a private repository, `ubuntu-latest` for a public one | `mise run verify`, whose dependencies mise runs in parallel in the one VM |
+| `Static checks` | `ubuntu-latest` | whichever of `check:toolchain`, `format`, `deny`, `deps`, `lint:typos`, `lint:md` and `specs` the repository defines, then `deny:advisories`; nothing compiles, so a failure reports in about a minute |
+| `Publish checks` | as the build job, with the volume read-only | with `semver`: `mise run semver` and `cargo package` |
+| `Verify` | `ubuntu-latest` | fails when a job above failed or was cancelled, passes when one was skipped by its own condition |
+
+A ruleset requires only `Verify` (`verify / Verify` from a caller job named
+`verify`), so the jobs behind it can change without a ruleset change, and an
+upstream failure cannot skip a required check into green.
+Only the build job writes the build cache.
+Parallel jobs that commit one Namespace cache tag overwrite each other
+([Cache Volumes](https://namespace.so/docs/architecture/storage/cache-volumes):
+last write wins, no merge step), so `Publish checks` mounts it read-only, and
+on a GitHub-hosted runner saves under its own key suffix.
 A push to the default branch always builds, so the mbx cache saved from it
 stays current.
 
@@ -146,7 +164,7 @@ stays current.
 |:--|:--|:--|
 | `mise-version` | required | The mise release to install |
 | `working-directory` | `.` | The directory that holds the crate's `mise.toml` |
-| `advisories` | `true` | Runs `mise run deny:advisories` after `verify` |
+| `advisories` | `true` | Runs `mise run deny:advisories` in `Static checks` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
 | `cache-size` | `50` | Size in GB of the Namespace cache volume a private repository's build mounts |
