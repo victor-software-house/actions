@@ -1,0 +1,9 @@
+name: macOS signing cleanup
+description: Delete the temporary keychain and the notary key that macos-signing made
+author: victor-software-house
+
+runs:
+  using: composite
+  steps:
+    - shell: sh
+      run: '"$GITHUB_ACTION_PATH/delete.sh"'

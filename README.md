@@ -14,6 +14,7 @@ only the line that pins it.
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 | `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
+| `macos-signing/` | The signing actions: `macos-signing` loads the CI Developer ID identities and the notary key from 1Password into a temporary keychain, `macos-signing/delete` removes them |
 
 ## Use the Rust catalog
 
@@ -272,6 +273,67 @@ whole history is scanned here once a day, not on every push.
 The job installs gitleaks from the caller's `mise.dev.toml` and runs the
 caller's `hooks:secrets:history` task, which passes its arguments to
 `gitleaks git`, with `MISE_ENV=dev,hooks`.
+
+## Sign and notarize on macOS
+
+The CI Developer ID identities and the App Store Connect notary key live only
+in 1Password, in the Environment `VSH CI macOS signing`.
+A release job fetches them through
+[1Password Credential Broker](https://www.1password.dev/brokered-access/github-actions.md),
+which checks the job's GitHub OIDC token against the repository's connection
+(repository, `release` environment, branch) before it releases the values.
+No repository holds a copy, and rotating a credential means changing it in
+that one Environment.
+
+The signing job names the `release` environment, may request an OIDC token,
+and calls the action by commit before it signs, with the cleanup last:
+
+```yaml
+jobs:
+  sign:
+    runs-on: nscloud-macos-tahoe-arm64-6x14
+    environment: release
+    permissions:
+      contents: write
+      id-token: write # the token 1Password checks
+    steps:
+      - uses: victor-software-house/actions/macos-signing@<commit> # <tag>
+        with:
+          workload-id: ${{ vars.OP_WORKLOAD_ID }}
+          environment-id: ${{ vars.OP_ENVIRONMENT_ID }}
+          integration-key: ${{ secrets.OP_INTEGRATION_KEY }}
+          installer: true # only for productbuild
+      # codesign --sign "Developer ID Application" …, then
+      # xcrun notarytool submit … --key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID"
+      - if: always()
+        uses: victor-software-house/actions/macos-signing/delete@<commit> # <tag>
+```
+
+The Environment holds `MACOS_APP_P12_BASE64`, `MACOS_APP_P12_PASSWORD`,
+`MACOS_INSTALLER_P12_BASE64`, `MACOS_INSTALLER_P12_PASSWORD`,
+`NOTARY_KEY_P8_BASE64`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID`, each on one
+line, the files base64-encoded.
+The action loads the Environment's values as step outputs, so no later step
+sees them in its environment.
+It imports the Developer ID Application identity, and the Installer identity
+when `installer` is `true`, into a temporary keychain under `RUNNER_TEMP`
+that becomes the only keychain searched: `codesign` takes the first matching
+identity in the search list, whatever `--keychain` names.
+It writes the notary key to a private file and sets `NOTARY_KEY_PATH`,
+`NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` for the next steps.
+`macos-signing/delete` restores the login keychain and deletes the temporary
+one and the key file.
+
+| Input | Default | Effect |
+|:--|:--|:--|
+| `workload-id` | required | The repository's 1Password workload, its `OP_WORKLOAD_ID` variable |
+| `environment-id` | required | The 1Password Environment that holds the signing set, `OP_ENVIRONMENT_ID` |
+| `integration-key` | required | The organization secret `OP_INTEGRATION_KEY`, an encryption key useless without a matching OIDC token |
+| `installer` | `false` | Also imports the Developer ID Installer identity |
+
+Build in a job without the `release` environment and sign the artifact in
+another, so no dependency code runs while the identity is unlocked.
+A pull request from a fork gets no secret, so it cannot reach the action.
 
 ## Turn a template piece off or on
 
