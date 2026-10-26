@@ -294,14 +294,18 @@ jobs:
             ~/.cargo
             ~/.cache/mbx
             ${{ github.workspace }}/${{ inputs.working-directory }}/target
-      # The GitHub mise cache is for GitHub-hosted runners only; a Namespace
-      # runner keeps its installs on the volume.
+      # Every job that installs the toolchain uses these two steps, by alias.
+      # The GitHub mise cache is for GitHub-hosted runners, because a Namespace
+      # runner keeps its installs on the volume; a job with no volume, the
+      # static checks, sets TOOLCHAIN_CACHE to use it on every runner.
       #
-      # One stalled rustup download once held this step to its limit, with no
-      # room for rustup's own retry. The download timeout applies to each
-      # stalled read, so 30 seconds ends a stall early; the second attempt
-      # resumes from rustup's partial files.
-      - name: Install locked toolchain
+      # rustup's download timeout ends a stalled read after 30 seconds, but
+      # not a slow one: a nightly download on 2026-10-26 ran a single
+      # five-minute attempt to its limit and failed a merge group. So the
+      # first attempt stops at 3 minutes, and the second resumes from rustup's
+      # partial files.
+      - &install-toolchain
+        name: Install locked toolchain
         id: toolchain
         if: needs.changes.outputs.build != 'false'
         continue-on-error: true
@@ -312,8 +316,10 @@ jobs:
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
-          cache: ${{ runner.environment == 'github-hosted' }}
-      - name: Install locked toolchain (retry)
+          cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
+      - &install-toolchain-retry
+        name: Install locked toolchain (retry)
+        id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
@@ -322,7 +328,7 @@ jobs:
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
-          cache: ${{ runner.environment == 'github-hosted' }}
+          cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
       # A documentation-only pull request: the repository's tools without the
       # Rust toolchain, then the documentation checks it defines. The mise
       # cache stays off, so this run never saves a cache without Rust that a
@@ -526,6 +532,10 @@ jobs:
     needs: [changes, runner]
     if: ${{ !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' && needs.runner.result == 'success' }}
     runs-on: ${{ needs.runner.outputs.light }}
+    # No cache volume here, so the toolchain steps use the GitHub mise cache
+    # on every runner.
+    env:
+      TOOLCHAIN_CACHE: "true"
     permissions:
       contents: read
     defaults:
@@ -538,16 +548,8 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
-      - name: Install locked toolchain
-        id: toolchain
-        timeout-minutes: 5
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-        env:
-          RUSTUP_DOWNLOAD_TIMEOUT: "30"
-        with:
-          version: ${{ inputs.mise-version }}
-          working_directory: ${{ inputs.working-directory }}
-          cache: true
+      - *install-toolchain
+      - *install-toolchain-retry
       # Each task runs when the repository defines it, and every one runs
       # even after another fails, so one run reports them all.
       - name: Static checks
@@ -569,9 +571,10 @@ jobs:
           fi
       # Runs even when a static check failed, so one run reports both, but
       # not when setup failed: without the toolchain it would only repeat
-      # that failure under another name.
+      # that failure under another name. Either install attempt counts: a first
+      # attempt that timed out reads failure even when the retry succeeded.
       - name: Advisories
-        if: ${{ !cancelled() && inputs.advisories && steps.toolchain.outcome == 'success' }}
+        if: ${{ !cancelled() && inputs.advisories && (steps.toolchain.outcome == 'success' || steps.toolchain-retry.outcome == 'success') }}
         timeout-minutes: 2
         run: mise run deny:advisories
 
@@ -610,27 +613,8 @@ jobs:
             ~/.cargo
             ~/.cache/mbx
             ${{ github.workspace }}/${{ inputs.working-directory }}/target
-      - name: Install locked toolchain
-        id: toolchain
-        continue-on-error: true
-        timeout-minutes: 3
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-        env:
-          RUSTUP_DOWNLOAD_TIMEOUT: "30"
-        with:
-          version: ${{ inputs.mise-version }}
-          working_directory: ${{ inputs.working-directory }}
-          cache: ${{ runner.environment == 'github-hosted' }}
-      - name: Install locked toolchain (retry)
-        if: steps.toolchain.outcome == 'failure'
-        timeout-minutes: 5
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
-        env:
-          RUSTUP_DOWNLOAD_TIMEOUT: "30"
-        with:
-          version: ${{ inputs.mise-version }}
-          working_directory: ${{ inputs.working-directory }}
-          cache: ${{ runner.environment == 'github-hosted' }}
+      - *install-toolchain
+      - *install-toolchain-retry
       # Restores the newest objects under the shared prefix, the build job's
       # included, and saves its own entry from the default branch.
       - name: Cache builds with mbx
