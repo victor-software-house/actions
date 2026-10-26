@@ -17,6 +17,11 @@ inputs, and how a repository calls it.
    or `Verify`'s fallback when `Runner` failed, repeats the rule inline with a
    comment that says why; `runs-on` reads no workflow-level `env`, so a
    reusable workflow without such a job keeps one inline copy per job.
+   A step that several jobs of one workflow run, such as the toolchain
+   install, is written once as a YAML anchor and repeated by alias.
+   GitHub Actions resolves anchors but not merge keys (`<<`), so an aliased
+   step is identical everywhere; a job adjusts it only through the
+   environment it sets.
 2. **Callers pin by commit.**
    A repository references a workflow or catalog by commit SHA with a
    `# main, <date>` comment, never by branch, so a change here reaches it only
