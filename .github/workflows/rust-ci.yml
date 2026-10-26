@@ -319,6 +319,7 @@ jobs:
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
       - &install-toolchain-retry
         name: Install locked toolchain (retry)
+        id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
@@ -570,9 +571,10 @@ jobs:
           fi
       # Runs even when a static check failed, so one run reports both, but
       # not when setup failed: without the toolchain it would only repeat
-      # that failure under another name.
+      # that failure under another name. Either install attempt counts: a first
+      # attempt that timed out reads failure even when the retry succeeded.
       - name: Advisories
-        if: ${{ !cancelled() && inputs.advisories && steps.toolchain.outcome == 'success' }}
+        if: ${{ !cancelled() && inputs.advisories && (steps.toolchain.outcome == 'success' || steps.toolchain-retry.outcome == 'success') }}
         timeout-minutes: 2
         run: mise run deny:advisories
 
