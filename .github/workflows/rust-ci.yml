@@ -333,7 +333,7 @@ jobs:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
-          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}'
+          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       - &remove-partial-toolchains
         name: Stop the first install and remove partly installed toolchains
         if: steps.toolchain.outcome == 'failure'
@@ -378,7 +378,7 @@ jobs:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
-          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}'
+          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       # A documentation-only pull request: the repository's tools without the
       # Rust toolchain, then the documentation checks it defines. The mise
       # cache stays off, so this run never saves a cache without Rust that a
@@ -606,9 +606,10 @@ jobs:
       - name: Keep the toolchains in the mise cache
         shell: bash
         run: |
+          data_dir=${MISE_DATA_DIR:-$HOME/.local/share/mise}
           {
-            echo "MISE_RUSTUP_HOME=$HOME/.local/share/mise/rustup"
-            echo "MISE_CARGO_HOME=$HOME/.local/share/mise/cargo"
+            echo "MISE_RUSTUP_HOME=$data_dir/rustup"
+            echo "MISE_CARGO_HOME=$data_dir/cargo"
           } >> "$GITHUB_ENV"
       - *install-toolchain
       - *remove-partial-toolchains
