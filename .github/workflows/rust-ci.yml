@@ -303,7 +303,9 @@ jobs:
       # config file: a template update edits mise.toml, and that default
       # dropped the cache for every pull request and merge group until the
       # next default-branch run saved one. A caller with no lock file keeps
-      # the default key.
+      # the default key. A job that keeps the toolchains in the cache (the
+      # static checks) adds "-rustup" to it, so it never restores an entry
+      # saved without them.
       #
       # rustup's download timeout ends a stalled read after 30 seconds, but
       # not a slow one: a nightly download on 2026-10-26 ran a single
@@ -331,7 +333,7 @@ jobs:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
-          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}'
+          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       - &remove-partial-toolchains
         name: Stop the first install and remove partly installed toolchains
         if: steps.toolchain.outcome == 'failure'
@@ -353,8 +355,8 @@ jobs:
           done
           pkill -KILL -x mise || true
           pkill -KILL -x rustup || true
-          rustup_home=${RUSTUP_HOME:-$HOME/.rustup}
-          mise_rust=${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs/rust
+          rustup_home=${MISE_RUSTUP_HOME:-${RUSTUP_HOME:-$HOME/.rustup}}
+          mise_rust=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/installs/rust
           for dir in "$rustup_home"/toolchains/*/; do
             [ -d "$dir" ] || continue
             name=$(basename "$dir")
@@ -376,7 +378,7 @@ jobs:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
-          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}'
+          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       # A documentation-only pull request: the repository's tools without the
       # Rust toolchain, then the documentation checks it defines. The mise
       # cache stays off, so this run never saves a cache without Rust that a
@@ -596,6 +598,19 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
+      # The GitHub mise cache saves only mise's data directory, and rustup
+      # keeps the toolchains in ~/.rustup and ~/.cargo, so a cache hit still
+      # downloaded both of them. Here they move under the data directory,
+      # where the cache holds them; the jobs on the cache volume keep the
+      # default paths, which the volume holds.
+      - name: Keep the toolchains in the mise cache
+        shell: bash
+        run: |
+          data_dir=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
+          {
+            echo "MISE_RUSTUP_HOME=$data_dir/rustup"
+            echo "MISE_CARGO_HOME=$data_dir/cargo"
+          } >> "$GITHUB_ENV"
       - *install-toolchain
       - *remove-partial-toolchains
       - *install-toolchain-retry
