@@ -340,7 +340,7 @@ jobs:
             name=$(basename "$dir")
             if ! "$dir/bin/rustc" --version > /dev/null 2>&1; then
               echo "Removing $name: its rustc does not run."
-              rm -rf "$dir" "$rustup_home/update-hashes/$name" "$mise_rust/${name%-*-*-*-*}"
+              rm -rf "$dir" "$rustup_home/update-hashes/$name" "${mise_rust:?}/${name%-*-*-*-*}"
             fi
           done
       - &install-toolchain-retry
