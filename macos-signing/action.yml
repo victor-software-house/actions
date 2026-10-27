@@ -1,0 +1,41 @@
+name: macOS signing
+description: >-
+  Load the CI Developer ID identities and the notary key from 1Password
+  Credential Broker into a temporary keychain; macos-signing/delete removes it
+author: victor-software-house
+
+inputs:
+  workload-id:
+    description: The 1Password workload of the calling repository (its OP_WORKLOAD_ID variable)
+    required: true
+  environment-id:
+    description: The 1Password Environment that holds the signing set (OP_ENVIRONMENT_ID)
+    required: true
+  integration-key:
+    description: The 1Password integration key, the OP_INTEGRATION_KEY organization secret
+    required: true
+  installer:
+    description: Also import the Developer ID Installer identity, for productbuild
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # The values stay step outputs, read only by the import below; no later
+    # step of the caller's job sees them in its environment.
+    - id: load
+      uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5.0.1
+      env:
+        OP_WORKLOAD_ID: ${{ inputs.workload-id }}
+        OP_ENVIRONMENT_ID: ${{ inputs.environment-id }}
+        OP_INTEGRATION_KEY: ${{ inputs.integration-key }}
+    - shell: sh
+      run: '"$GITHUB_ACTION_PATH/import.sh"'
+      env:
+        MACOS_APP_P12_BASE64: ${{ steps.load.outputs.MACOS_APP_P12_BASE64 }}
+        MACOS_APP_P12_PASSWORD: ${{ steps.load.outputs.MACOS_APP_P12_PASSWORD }}
+        MACOS_INSTALLER_P12_BASE64: ${{ inputs.installer == 'true' && steps.load.outputs.MACOS_INSTALLER_P12_BASE64 || '' }}
+        MACOS_INSTALLER_P12_PASSWORD: ${{ inputs.installer == 'true' && steps.load.outputs.MACOS_INSTALLER_P12_PASSWORD || '' }}
+        NOTARY_KEY_P8_BASE64: ${{ steps.load.outputs.NOTARY_KEY_P8_BASE64 }}
+        NOTARY_KEY_ID: ${{ steps.load.outputs.NOTARY_KEY_ID }}
+        NOTARY_ISSUER_ID: ${{ steps.load.outputs.NOTARY_ISSUER_ID }}
