@@ -306,8 +306,9 @@ jobs:
       # A first attempt stopped mid-install can leave a toolchain rustup only
       # half recovers: on 2026-10-27 the retry reinstalled the nightly's six
       # components and its rustc still did not run. So before the retry, every
-      # toolchain whose rustc does not run is removed with its update hash,
-      # and the retry installs it from scratch; rustup's downloads stay.
+      # toolchain whose rustc does not run is removed with its update hash and
+      # mise's record of it, and the retry installs it from scratch; rustup's
+      # downloads stay.
       - &install-toolchain
         name: Install locked toolchain
         id: toolchain
@@ -324,16 +325,22 @@ jobs:
       - &remove-partial-toolchains
         name: Remove partly installed toolchains
         if: steps.toolchain.outcome == 'failure'
+        # The retry runs whatever this step does.
+        continue-on-error: true
         timeout-minutes: 1
         shell: bash
+        # mise records a Rust version as installed with a link under its data
+        # directory, named for the toolchain without its host triple, and
+        # would skip a version whose link is left; so the link goes too.
         run: |
           rustup_home=${RUSTUP_HOME:-$HOME/.rustup}
+          mise_rust=${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs/rust
           for dir in "$rustup_home"/toolchains/*/; do
             [ -d "$dir" ] || continue
             name=$(basename "$dir")
             if ! "$dir/bin/rustc" --version > /dev/null 2>&1; then
               echo "Removing $name: its rustc does not run."
-              rm -rf "$dir" "$rustup_home/update-hashes/$name"
+              rm -rf "$dir" "$rustup_home/update-hashes/$name" "$mise_rust/${name%-*-*-*-*}"
             fi
           done
       - &install-toolchain-retry
