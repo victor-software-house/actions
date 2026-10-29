@@ -182,7 +182,8 @@ stays current.
 | `light-runner` | `ubuntu-latest` | Final label for lightweight jobs |
 | `cache-volume` | `false` | Use the supplied persistent build cache volume |
 | `read-only-label` | empty | Concrete safety label required when a persistent volume is selected |
-| `cache-size` | `0` | Explicit volume size in GB, matching the rendered runner labels |
+| `cache-size-label` | empty | Concrete capacity label present in both runner arrays |
+| `cache-size` | `0` | Explicit volume size in GB, matching the rendered capacity label |
 
 ## Check the template version
 

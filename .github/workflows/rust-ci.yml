@@ -48,6 +48,10 @@ on:
         description: Final cache-safety label required in read-only runner labels when a cache volume is selected
         type: string
         default: ""
+      cache-size-label:
+        description: Final capacity label present in both supplied runner arrays, ending in the configured number of GB
+        type: string
+        default: ""
       cache-size:
         description: Explicit size in GB matching the supplied persistent cache labels
         type: number
@@ -156,11 +160,24 @@ jobs:
     steps:
       - &validate-cache-inputs
         name: Validate final cache configuration
-        if: ${{ inputs.cache-volume && (inputs.read-only-label == '' || !contains(fromJSON(inputs.read-only-runner), inputs.read-only-label) || contains(fromJSON(inputs.build-runner), inputs.read-only-label) || inputs.cache-size <= 0) }}
+        if: inputs.cache-volume
         working-directory: ${{ github.workspace }}
+        env:
+          VALID_CONFIG: ${{ inputs.read-only-label != '' && contains(fromJSON(inputs.read-only-runner), inputs.read-only-label) && !contains(fromJSON(inputs.build-runner), inputs.read-only-label) && inputs.cache-size > 0 && inputs.cache-size-label != '' && contains(fromJSON(inputs.build-runner), inputs.cache-size-label) && contains(fromJSON(inputs.read-only-runner), inputs.cache-size-label) }}
+          CAPACITY_LABEL: ${{ inputs.cache-size-label }}
+          CAPACITY_GB: ${{ inputs.cache-size }}
         run: |
-          echo "::error::Cache-volume callers must supply distinct read-only labels containing the final safety label, and an explicit positive cache size matching their rendered runner labels."
-          exit 1
+          if [ "$VALID_CONFIG" != true ]; then
+            echo "::error::Invalid final cache configuration: supply coherent capacity and read-only safety labels."
+            exit 1
+          fi
+          case "$CAPACITY_LABEL" in
+            *-"$CAPACITY_GB"gb) ;;
+            *)
+              echo "::error::The final capacity label must match cache-size in GB."
+              exit 1
+              ;;
+          esac
       - name: Check out repository
         timeout-minutes: 3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
