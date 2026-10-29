@@ -88,7 +88,7 @@ jobs:
       mise-version: 2026.10.17
 ```
 
-The caller supplies final build labels as JSON in `runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
+The caller supplies final build labels as JSON in `build-runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
 Repository visibility, provider selection and machine sizes are resolved when the caller is rendered, not by this workflow.
 There is no runner-resolution job or abstract runner mode.
 Public generated callers carry only their selected public configuration.
@@ -148,7 +148,7 @@ The jobs, which run in parallel after `Changes`:
 
 | Job | Runner | Runs |
 |:--|:--|:--|
-| `Build and test` | final `runner` or `read-only-runner` labels; light for documentation-only changes | `mise run verify` |
+| `Build and test` | final `build-runner` or `read-only-runner` labels; light for documentation-only changes | `mise run verify` |
 | `Static checks` | `light-runner` | configured static checks, then advisories |
 | `Publish checks` | `read-only-runner` | with `semver`: API and package checks |
 | `Verify` | `light-runner` | fails when a required job failed or was cancelled |
@@ -174,11 +174,12 @@ stays current.
 | `advisories` | `true` | Runs `mise run deny:advisories` in `Static checks` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
-| `runner` | `["ubuntu-latest"]` | JSON array of final build labels |
+| `build-runner` | `["ubuntu-latest"]` | JSON array of final build labels |
 | `read-only-runner` | `["ubuntu-latest"]` | JSON array of final labels for builds that cannot commit cache state |
 | `light-runner` | `ubuntu-latest` | Final label for lightweight jobs |
 | `cache-volume` | `false` | Use the supplied persistent build cache volume |
-| `cache-size` | `50` | Persistent cache volume size in GB |
+| `read-only-label` | empty | Concrete safety label required when a persistent volume is selected |
+| `cache-size` | `0` | Explicit volume size in GB, matching the rendered runner labels |
 
 ## Check the template version
 

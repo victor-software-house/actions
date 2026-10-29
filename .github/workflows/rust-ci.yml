@@ -28,7 +28,7 @@ on:
         description: Cancels a hung Verify, Semver or Package step
         type: number
         default: 8
-      runner:
+      build-runner:
         description: JSON array of final build runner labels
         type: string
         default: '["ubuntu-latest"]'
@@ -44,10 +44,14 @@ on:
         description: The supplied build labels mount a persistent cache volume
         type: boolean
         default: false
+      read-only-label:
+        description: Final cache-safety label required in read-only runner labels when a cache volume is selected
+        type: string
+        default: ""
       cache-size:
-        description: Size in GB of the persistent build cache volume
+        description: Explicit size in GB matching the supplied persistent cache labels
         type: number
-        default: 50
+        default: 0
 
 permissions:
   contents: read
@@ -136,7 +140,7 @@ jobs:
     if: ${{ !cancelled() && !github.event.pull_request.draft }}
     # Final labels come from the rendered caller. Only cache-write permission
     # depends on the event; a documentation-only change takes the light runner.
-    runs-on: ${{ needs.changes.outputs.build == 'false' && inputs.light-runner || fromJSON((github.event_name == 'merge_group' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && inputs.runner || inputs.read-only-runner) }}
+    runs-on: ${{ needs.changes.outputs.build == 'false' && inputs.light-runner || fromJSON((github.event_name == 'merge_group' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && inputs.build-runner || inputs.read-only-runner) }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -150,6 +154,13 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
+      - &validate-cache-inputs
+        name: Validate final cache configuration
+        if: ${{ inputs.cache-volume && (inputs.read-only-label == '' || !contains(fromJSON(inputs.read-only-runner), inputs.read-only-label) || inputs.build-runner == inputs.read-only-runner || inputs.cache-size <= 0) }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "::error::Cache-volume callers must supply distinct read-only labels containing the final safety label, and an explicit positive cache size matching their rendered runner labels."
+          exit 1
       - name: Check out repository
         timeout-minutes: 3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -544,6 +555,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
+      - *validate-cache-inputs
       - name: Check out repository
         timeout-minutes: 3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

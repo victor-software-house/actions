@@ -7,7 +7,8 @@ if grep -nE 'github\.event\.repository\.private|nscloud-(ubuntu|macos)|namespace
   exit 1
 fi
 yq -e '.jobs.runner == null' .github/workflows/rust-ci.yml >/dev/null
-for file in "${workflows[@]}"; do
+yq -e '.on.workflow_call.inputs."build-runner".type == "string" and .on.workflow_call.inputs.runner == null' .github/workflows/rust-ci.yml >/dev/null
+for file in .github/workflows/template-check.yml .github/workflows/secrets.yml; do
   yq -e '.on.workflow_call.inputs.runner.type == "string"' "$file" >/dev/null
 done
 yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-latest"' .github/workflows/rust-ci.yml >/dev/null
