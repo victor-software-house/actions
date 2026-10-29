@@ -88,18 +88,18 @@ jobs:
       mise-version: 2026.10.17
 ```
 
-The build and publish jobs run where the `runner` input says. Its default,
-`cheapest`, reads the calling repository's visibility: `ubuntu-latest` for a
-public repository, free there, and a Namespace 4x8 for a private one, at
-US$0.004 a minute on the plan against US$0.006 for a GitHub-hosted runner on
-a private repository. `github-hosted`, `namespace-4x8`, `namespace-8x16` and `namespace-16x32` choose one outright.
-A `Runner` job resolves the value first, so any other value fails before a
-build takes a runner.
+The caller supplies final build labels as JSON in `build-runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
+Repository visibility, provider selection and machine sizes are resolved when the caller is rendered, not by this workflow.
+There is no runner-resolution job or abstract runner mode.
+Public generated callers carry only their selected public configuration.
 It checks out the repository with its submodules, installs the locked tools
 with mise, restores mbx's compiled objects, and runs `mise run verify` with
 `MISE_ENV=ci` and git's first branch set to `main`.
 A cache step that fails, such as a save refused because the commit's key is already reserved on a re-run, does not fail the job: the result comes from the build and tests.
-The build cache follows the runner the job lands on, and no input chooses it separately.
+The caller explicitly selects persistent-volume caching with `cache-volume`.
+A volume caller must supply its concrete read-only safety label and an explicit positive `cache-size` matching its runner labels.
+The render fragment derives the size label and trim limit from one value; render tests check they match.
+The execution guard refuses missing safety configuration without resolving provider policy.
 On Namespace the job runs with a cache volume tagged `rust-<repository>`,
 sized by `cache-size`, and keeps mise's installs, rustup's toolchains, Cargo's
 home, `target/`, and mbx's store on it; the job commits the volume when it
@@ -147,21 +147,17 @@ With `semver`, every pull request builds: `cargo package` ships documentation
 files, and the `Package` step checks it.
 The `Verify` check reports a result either way.
 
-The jobs, which run in parallel after `Changes` and `Runner`:
+The jobs, which run in parallel after `Changes`:
 
 | Job | Runner | Runs |
 |:--|:--|:--|
-| `Build and test` | from `runner`; Namespace runners mount the cache volume | `mise run verify`, whose dependencies mise runs in parallel in the one VM |
-| `Static checks` | light | whichever of `check:toolchain`, `format`, `deny`, `deps`, `lint:typos`, `lint:md` and `specs` the repository defines, then `deny:advisories`; nothing compiles, so a failure reports in about a minute |
-| `Publish checks` | as the build job, with the volume read-only | with `semver`: `mise run semver` and `cargo package` |
-| `Runner` | light | resolves the `runner` input to a machine, or fails on an unknown value before any build starts, and outputs the runner of every job above, so each rule lives in one place |
-| `Verify` | light | fails when a job above failed or was cancelled, passes when one was skipped by its own condition |
+| `Build and test` | final `build-runner` or `read-only-runner` labels; light for documentation-only changes | `mise run verify` |
+| `Static checks` | `light-runner` | configured static checks, then advisories |
+| `Publish checks` | `read-only-runner` | with `semver`: API and package checks |
+| `Verify` | `light-runner` | fails when a required job failed or was cancelled |
 
-A light runner is `ubuntu-latest` in a public repository, where it is free, and
-Namespace `2x4` in a private one, where GitHub-hosted minutes count against
-the organization's quota.
-`Changes` and `Runner` pick theirs inline, because they run first, and
-`Verify` repeats the rule as a fallback for a failed `Runner`.
+The caller chooses every label at apply time. Runtime choices only reflect
+the event or changed files, such as read-only cache safety for pull requests.
 
 A ruleset requires only `Verify` (`verify / Verify` from a caller job named
 `verify`), so the jobs behind it can change without a ruleset change, and an
@@ -181,8 +177,13 @@ stays current.
 | `advisories` | `true` | Runs `mise run deny:advisories` in `Static checks` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
-| `runner` | `cheapest` | Where `Build and test` and `Publish checks` run: `cheapest`, `github-hosted`, `namespace-4x8`, `namespace-8x16` or `namespace-16x32` |
-| `cache-size` | `50` | Size in GB of the Namespace cache volume a build on a Namespace runner mounts |
+| `build-runner` | `["ubuntu-latest"]` | JSON array of final build labels |
+| `read-only-runner` | `["ubuntu-latest"]` | JSON array of final labels for builds that cannot commit cache state |
+| `light-runner` | `ubuntu-latest` | Final label for lightweight jobs |
+| `cache-volume` | `false` | Use the supplied persistent build cache volume |
+| `read-only-label` | empty | Concrete safety label required when a persistent volume is selected |
+| `cache-size-label` | empty | Concrete capacity label present in both runner arrays |
+| `cache-size` | `0` | Explicit volume size in GB, matching the rendered capacity label |
 
 ## Check the template version
 
@@ -305,7 +306,7 @@ and calls the action by commit before it signs, with the cleanup last:
 ```yaml
 jobs:
   sign:
-    runs-on: nscloud-macos-tahoe-arm64-6x14
+    runs-on: macos-latest
     environment: release
     permissions:
       contents: write
