@@ -52,6 +52,10 @@ on:
         description: The directory that holds .copier-answers.yml and its mise.toml
         type: string
         default: .
+      runner:
+        description: Final runner label for the template check and its path filter
+        type: string
+        default: ubuntu-latest
       paths:
         description: Newline-separated globs of the files the template renders; a pull request that changes none of them skips the check. Empty checks every pull request
         type: string
@@ -75,10 +79,8 @@ jobs:
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && inputs.paths != '' && !github.event.pull_request.draft
-    # A shallow checkout and one diff. A private repository runs it on the
-    # smallest Namespace shape, because GitHub-hosted minutes in a private
-    # repository count against a quota; a public one runs it GitHub-hosted.
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
+    # The rendered caller supplies its final runner label.
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 3
     permissions:
       contents: read
@@ -142,9 +144,7 @@ jobs:
     # issues. Each pull request run has a group of its own.
     concurrency:
       group: ${{ github.event_name == 'pull_request' && format('template-{0}', github.run_id) || format('template-report-{0}', inputs.working-directory) }}
-    # One copier update with no build: the smallest Namespace shape, which
-    # bills half of a 4x8.
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner }}
     defaults:
       run:
         # GitHub runs bash with pipefail only when the shell is named.

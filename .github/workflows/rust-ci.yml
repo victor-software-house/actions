@@ -1,43 +1,8 @@
-# The reusable Rust CI workflow. A caller's ci.yml holds only the job that
-# calls it, by commit:
-#
-#   on:
-#     pull_request:
-#       types: [opened, synchronize, reopened, ready_for_review]
-#     push:
-#       branches: [main]
-#   concurrency:
-#     group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
-#     cancel-in-progress: true
-#   jobs:
-#     verify:
-#       if: ${{ !github.event.pull_request.draft }}
-#       uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
-#       with:
-#         mise-version: <mise version>
-#
-# The caller owns concurrency: one group per branch, cancelling the run a new
-# push replaces.
-#
-# The caller picks where the build and publish jobs run with the runner
-# input. Its default, cheapest, follows the caller's visibility (the github
-# context here is the caller's): GitHub-hosted for a public repository, free
-# there and measured faster for these crates, and a Namespace 4x8 for a
-# private one, cheaper per minute than a GitHub-hosted runner on a private
-# repository. The other jobs need no build and always run GitHub-hosted.
-#
-# The build cache follows the runner the job lands on, with no input: a
-# Namespace runner mounts a cache volume tagged rust-<repository> that keeps
-# the toolchains, Cargo's home, target/, and mbx's store between runs, and a
-# GitHub-hosted runner restores the mise install cache and mbx's objects from
-# the GitHub Actions cache.
-#
-# A pull request that changes only documentation builds nothing: the build
-# job runs the documentation checks on a GitHub-hosted runner instead, and
-# the Verify job still reports. A push always builds, so the build
-# cache, saved only from the default branch, stays current; a caller with a
-# merge queue has no push run and refreshes it through a workflow_dispatch
-# run on the default branch instead.
+# The reusable Rust CI workflow accepts final runner labels from its caller.
+# Repository visibility, provider selection and machine sizes are resolved
+# when the caller is rendered, never when this workflow executes.
+# Only event-dependent behavior remains here: documentation-only checks and
+# whether a run may commit its build cache.
 name: Rust CI
 
 on:
@@ -64,14 +29,23 @@ on:
         type: number
         default: 8
       runner:
-        description: >-
-          Where the build and publish jobs run: cheapest (GitHub-hosted for a
-          public repository, a Namespace 4x8 for a private one), github-hosted,
-          namespace-4x8, namespace-8x16, or namespace-16x32
+        description: JSON array of final build runner labels
         type: string
-        default: cheapest
+        default: '["ubuntu-latest"]'
+      read-only-runner:
+        description: JSON array of final labels for builds that must not commit cache state
+        type: string
+        default: '["ubuntu-latest"]'
+      light-runner:
+        description: Final runner label for lightweight jobs
+        type: string
+        default: ubuntu-latest
+      cache-volume:
+        description: The supplied build labels mount a persistent cache volume
+        type: boolean
+        default: false
       cache-size:
-        description: Size in GB of the Namespace cache volume a build on a Namespace runner mounts
+        description: Size in GB of the persistent build cache volume
         type: number
         default: 50
 
@@ -102,11 +76,8 @@ jobs:
   changes:
     name: Changes
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-    # One API call and a checkout to search: no build. A private repository
-    # runs it on the smallest Namespace shape, because GitHub-hosted minutes
-    # in a private repository count against a quota; a public one runs it
-    # GitHub-hosted, free.
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.light-runner }}
+    # One API call and a checkout to search; the caller supplies its runner.
     timeout-minutes: 3
     permissions:
       contents: read
@@ -159,99 +130,13 @@ jobs:
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"
 
-  # The repository's own verify task, whose dependencies mise already runs in
-  # parallel inside this one VM. Publish checks and static checks run beside
-  # it in their own jobs, and the Verify job below reports all of them.
-  # Resolves the runner input before any job takes a runner, so a bad value
-  # fails here instead of building on a runner nobody chose, and computes
-  # every other job's runner once: each output below is the one place its
-  # rule lives. shape is github or a Namespace machine shape.
-  runner:
-    name: Runner
-    if: ${{ !github.event.pull_request.draft }}
-    # Picks its own light runner inline, as Changes does: it cannot read an
-    # output it has not produced yet.
-    runs-on: ${{ github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest' }}
-    timeout-minutes: 2
-    outputs:
-      shape: ${{ steps.pick.outputs.shape }}
-      # Static checks and Verify: Namespace 2x4 when private, because
-      # GitHub-hosted minutes in a private repository count against a quota;
-      # GitHub-hosted, free, when public.
-      light: ${{ steps.pick.outputs.light }}
-      # Build and test on a Namespace shape mounts the cache volume. Only a
-      # merge queue run, or a push, dispatch or schedule run on the default
-      # branch, commits it; every other run reads it and never commits it.
-      # The toolchains, Cargo's home and mbx's store it holds are run by
-      # every later build, releases included, and one volume serves every
-      # branch, so a pull request or a run on another branch, such as an
-      # experiment dispatched on its own branch, would hand its state to the
-      # next build of the default branch. The GitHub cache needs no such
-      # rule: it scopes a branch's saves to that branch. A JSON label list,
-      # or "ubuntu-latest" on the github shape.
-      build-labels: ${{ steps.pick.outputs.build-labels }}
-      # Publish checks read the same volume and never commit it.
-      publish-labels: ${{ steps.pick.outputs.publish-labels }}
-      # A documentation-only pull request builds nothing, so the build job
-      # takes a light runner, except that the github-hosted input keeps it
-      # GitHub-hosted.
-      docs-runner: ${{ steps.pick.outputs.docs-runner }}
-    steps:
-      - name: Resolve the runner input
-        id: pick
-        shell: bash
-        env:
-          RUNNER: ${{ inputs.runner }}
-          PRIVATE: ${{ github.event.repository.private }}
-          REPOSITORY: ${{ github.event.repository.name }}
-          CACHE_SIZE: ${{ inputs.cache-size }}
-          COMMITS: ${{ github.event_name == 'merge_group' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-        run: |
-          case "$RUNNER" in
-            cheapest) if [ "$PRIVATE" = true ]; then shape=4x8; else shape=github; fi ;;
-            github-hosted) shape=github ;;
-            namespace-4x8) shape=4x8 ;;
-            namespace-8x16) shape=8x16 ;;
-            namespace-16x32) shape=16x32 ;;
-            *)
-              echo "::error::Unknown runner '$RUNNER': use cheapest, github-hosted, namespace-4x8, namespace-8x16 or namespace-16x32"
-              exit 1
-              ;;
-          esac
-          echo "Runner '$RUNNER' resolves to $shape"
-          if [ "$PRIVATE" = true ]; then light=nscloud-ubuntu-24.04-amd64-2x4; else light=ubuntu-latest; fi
-          if [ "$shape" = github ]; then
-            build='"ubuntu-latest"'
-            publish='"ubuntu-latest"'
-            docs=ubuntu-latest
-          else
-            # A tag holds only [a-z0-9.-], which every repository name here matches.
-            volume=$(jq -cn --arg shape "$shape" --arg repository "$REPOSITORY" --arg size "$CACHE_SIZE" \
-              '["nscloud-ubuntu-24.04-amd64-\($shape)-with-cache", "nscloud-cache-tag-rust-\($repository)", "nscloud-cache-size-\($size)gb"]')
-            readonly_volume=$(jq -c '. + ["nscloud-cache-exp-do-not-commit"]' <<<"$volume")
-            if [ "$COMMITS" = true ]; then build=$volume; else build=$readonly_volume; fi
-            publish=$readonly_volume
-            docs=$light
-          fi
-          {
-            echo "shape=$shape"
-            echo "light=$light"
-            echo "build-labels=$build"
-            echo "publish-labels=$publish"
-            echo "docs-runner=$docs"
-          } >> "$GITHUB_OUTPUT"
-          echo "Build runs on $build, publish checks on $publish, light jobs on $light"
-
   build:
     name: Build and test
-    needs: [changes, runner]
-    # A draft pull request runs no CI; marking it ready starts the run. A push
-    # skips Changes and builds. A failed Changes leaves no output, so this job
-    # builds then too. A failed Runner leaves no shape, so this job never runs
-    # then.
-    if: ${{ !cancelled() && !github.event.pull_request.draft && needs.runner.result == 'success' }}
-    # The Runner job's build-labels and docs-runner outputs hold the rules.
-    runs-on: ${{ needs.changes.outputs.build != 'false' && fromJSON(needs.runner.outputs.build-labels) || needs.runner.outputs.docs-runner }}
+    needs: changes
+    if: ${{ !cancelled() && !github.event.pull_request.draft }}
+    # Final labels come from the rendered caller. Only cache-write permission
+    # depends on the event; a documentation-only change takes the light runner.
+    runs-on: ${{ needs.changes.outputs.build == 'false' && inputs.light-runner || fromJSON((github.event_name == 'merge_group' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && inputs.runner || inputs.read-only-runner) }}
     # Every step carries its own limit, so the job is bounded by their sum.
     # A job limit cannot add the inputs' minutes to the fixed ones, since
     # expressions have no arithmetic, and one at the Verify limit cancelled
@@ -283,7 +168,7 @@ jobs:
       # commits the volume, whatever its steps' results; the next job forks
       # the newest commit on its node.
       - name: Mount the cache volume
-        if: needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted'
+        if: needs.changes.outputs.build != 'false' && inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 3
         uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
@@ -332,7 +217,7 @@ jobs:
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
-          cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
+          cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
           cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       - &remove-partial-toolchains
         name: Stop the first install and remove partly installed toolchains
@@ -377,7 +262,7 @@ jobs:
         with:
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
-          cache: ${{ env.TOOLCHAIN_CACHE == 'true' || runner.environment == 'github-hosted' }}
+          cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
           cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       # A documentation-only pull request: the repository's tools without the
       # Rust toolchain, then the documentation checks it defines. The mise
@@ -436,7 +321,7 @@ jobs:
       # removes the Cargo target before exporting. With it kept, a's 24.5 GB
       # target left 15.8 GB free, and the 20 GB export failed with ENOSPC.
       - name: Cache builds with mbx
-        if: needs.changes.outputs.build != 'false' && runner.environment == 'github-hosted'
+        if: needs.changes.outputs.build != 'false' && !inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 7
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
@@ -455,7 +340,7 @@ jobs:
       # On a cache volume mbx's store is already in place: the local backend
       # only sets mbx up, with no restore or export.
       - name: Cache builds with mbx on the volume
-        if: needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted'
+        if: needs.changes.outputs.build != 'false' && inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 2
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
@@ -550,7 +435,7 @@ jobs:
       # earlier step passed, so a red run never trims the store a green run
       # would reuse; the target/ size limit applies to every run.
       - name: Trim the cache volume
-        if: ${{ !cancelled() && needs.changes.outputs.build != 'false' && runner.environment != 'github-hosted' }}
+        if: ${{ !cancelled() && needs.changes.outputs.build != 'false' && inputs.cache-volume }}
         continue-on-error: true
         timeout-minutes: 3
         shell: bash
@@ -573,15 +458,15 @@ jobs:
           du -sh ~/.local/share/mise ~/.rustup ~/.cargo ~/.cache/mbx target
           df -h /cache
 
-  # The checks that compile nothing, on the Runner job's light runner, so a
+  # The checks that compile nothing, on the caller's light runner, so a
   # formatting, policy or spelling failure reports in about a minute instead
   # of after the build. The build job's verify task runs the same tasks
   # again; each takes seconds there.
   static:
     name: Static checks
-    needs: [changes, runner]
-    if: ${{ !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' && needs.runner.result == 'success' }}
-    runs-on: ${{ needs.runner.outputs.light }}
+    needs: changes
+    if: ${{ !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
+    runs-on: ${{ inputs.light-runner }}
     # No cache volume here, so the toolchain steps use the GitHub mise cache
     # on every runner.
     env:
@@ -650,9 +535,9 @@ jobs:
   # never races the build job for one key.
   publish:
     name: Publish checks
-    needs: [changes, runner]
-    if: ${{ inputs.semver && !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' && needs.runner.result == 'success' }}
-    runs-on: ${{ fromJSON(needs.runner.outputs.publish-labels) }}
+    needs: changes
+    if: ${{ inputs.semver && !cancelled() && !github.event.pull_request.draft && needs.changes.outputs.build != 'false' }}
+    runs-on: ${{ fromJSON(inputs.read-only-runner) }}
     permissions:
       contents: read
     defaults:
@@ -666,7 +551,7 @@ jobs:
           persist-credentials: false
           submodules: true
       - name: Mount the cache volume
-        if: runner.environment != 'github-hosted'
+        if: inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 3
         uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
@@ -683,7 +568,7 @@ jobs:
       # Restores the newest objects under the shared prefix, the build job's
       # included, and saves its own entry from the default branch.
       - name: Cache builds with mbx
-        if: runner.environment == 'github-hosted'
+        if: ${{ !inputs.cache-volume }}
         continue-on-error: true
         timeout-minutes: 7
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
@@ -695,7 +580,7 @@ jobs:
           save-on-workflow-dispatch: true
           clean-target-before-export: true
       - name: Cache builds with mbx on the volume
-        if: runner.environment != 'github-hosted'
+        if: inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 2
         uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
@@ -721,25 +606,20 @@ jobs:
   # check `verify / Verify` while the jobs behind it change.
   verify:
     name: Verify
-    needs: [changes, runner, static, build, publish]
+    needs: [changes, static, build, publish]
     if: ${{ always() && !github.event.pull_request.draft }}
-    # A failed Runner job leaves no output, and this job must still report,
-    # so it repeats the light rule as its fallback.
-    runs-on: ${{ needs.runner.outputs.light || (github.event.repository.private && 'nscloud-ubuntu-24.04-amd64-2x4' || 'ubuntu-latest') }}
+    runs-on: ${{ inputs.light-runner }}
     timeout-minutes: 2
     steps:
       - name: Report the jobs
         shell: bash
         env:
-          RUNNER: ${{ needs.runner.result }}
           STATIC: ${{ needs.static.result }}
           BUILD: ${{ needs.build.result }}
           PUBLISH: ${{ needs.publish.result }}
-        # A failed Runner skips the build and publish jobs, so its own result
-        # counts here.
         run: |
-          echo "Runner: $RUNNER; Static checks: $STATIC; Build and test: $BUILD; Publish checks: $PUBLISH"
-          for result in "$RUNNER" "$STATIC" "$BUILD" "$PUBLISH"; do
+          echo "Static checks: $STATIC; Build and test: $BUILD; Publish checks: $PUBLISH"
+          for result in "$STATIC" "$BUILD" "$PUBLISH"; do
             if [ "$result" = failure ] || [ "$result" = cancelled ]; then
               exit 1
             fi

@@ -9,14 +9,14 @@ inputs, and how a repository calls it.
    Behaviour that two or more jobs, workflows or repositories need is written
    once, as a reusable workflow, a catalog task, or a job output, and every
    consumer reads that one place.
-   A copy drifts: when the light-runner rule changed, each inline copy had to
-   be found and changed by hand.
-   In `rust-ci.yml` the `Runner` job computes every other job's runner, and the
-   jobs read its outputs.
-   A job that cannot wait for that job, such as `Changes` and `Runner` itself,
-   or `Verify`'s fallback when `Runner` failed, repeats the rule inline with a
-   comment that says why; `runs-on` reads no workflow-level `env`, so a
-   reusable workflow without such a job keeps one inline copy per job.
+   A copy drifts: compute infrastructure choices once in the template's shared
+   render fragment and pass only final labels and configuration to workflows.
+   Repository visibility, runner provider and machine sizes are resolved when
+   applying the template, never by an executing job.
+   Public callers contain no private infrastructure alternatives or labels.
+   Shared workflows consume concrete inputs without visibility detection or
+   abstract runner-mode resolution. Event-dependent execution and cache-write
+   safety remain runtime behavior.
    A step that several jobs of one workflow run, such as the toolchain
    install, is written once as a YAML anchor and repeated by alias.
    GitHub Actions resolves anchors but not merge keys (`<<`), so an aliased
