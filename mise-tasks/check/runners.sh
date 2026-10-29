@@ -17,16 +17,16 @@ yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-latest"' .github
 guard=$(yq -r '.jobs.build.steps[0].run' .github/workflows/rust-ci.yml)
 VALID_CONFIG=true CAPACITY_LABEL=cache-size-50gb CAPACITY_GB=50 bash -c "$guard"
 mkdir -p target
-for size in 0 50.5 invalid; do
-  if VALID_CONFIG=false CAPACITY_LABEL="cache-size-${size}gb" CAPACITY_GB="$size" bash -c "$guard" >target/cache-guard.log 2>&1; then
+if VALID_CONFIG=false CAPACITY_LABEL=cache-size-50gb CAPACITY_GB=50 bash -c "$guard" >target/cache-guard.log 2>&1; then
+  echo "cache guard accepted invalid final label configuration" >&2
+  exit 1
+fi
+for size in '' 50.5 invalid; do
+  if VALID_CONFIG=true CAPACITY_LABEL="cache-size-${size}gb" CAPACITY_GB="$size" bash -c "$guard" >target/cache-guard.log 2>&1; then
     echo "cache guard accepted invalid capacity $size" >&2
     exit 1
   fi
 done
-if VALID_CONFIG=true CAPACITY_LABEL=cache-size-50.5gb CAPACITY_GB=50.5 bash -c "$guard" >target/cache-guard.log 2>&1; then
-  echo "cache guard accepted a fractional capacity" >&2
-  exit 1
-fi
 if VALID_CONFIG=true CAPACITY_LABEL=cache-size-20gb CAPACITY_GB=50 bash -c "$guard" >target/cache-guard.log 2>&1; then
   echo "cache guard accepted mismatched final capacity" >&2
   exit 1
