@@ -25,4 +25,4 @@ includes = ["mise-tasks"]
 
 [tasks.verify]
 description = "Every check CI runs"
-depends = ["lint:workflows", "check:pins", "check:catalog", "check:docs-probes"]
+depends = ["lint:workflows", "check:pins", "check:catalog", "check:docs-probes", "check:runners"]
