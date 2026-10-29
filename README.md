@@ -97,6 +97,9 @@ with mise, restores mbx's compiled objects, and runs `mise run verify` with
 `MISE_ENV=ci` and git's first branch set to `main`.
 A cache step that fails, such as a save refused because the commit's key is already reserved on a re-run, does not fail the job: the result comes from the build and tests.
 The caller explicitly selects persistent-volume caching with `cache-volume`.
+A volume caller must supply its concrete read-only safety label and an explicit positive `cache-size` matching its runner labels.
+The render fragment derives the size label and trim limit from one value; render tests check they match.
+The execution guard refuses missing safety configuration without resolving provider policy.
 On Namespace the job runs with a cache volume tagged `rust-<repository>`,
 sized by `cache-size`, and keeps mise's installs, rustup's toolchains, Cargo's
 home, `target/`, and mbx's store on it; the job commits the volume when it

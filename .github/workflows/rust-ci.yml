@@ -156,7 +156,7 @@ jobs:
     steps:
       - &validate-cache-inputs
         name: Validate final cache configuration
-        if: ${{ inputs.cache-volume && (inputs.read-only-label == '' || !contains(fromJSON(inputs.read-only-runner), inputs.read-only-label) || inputs.build-runner == inputs.read-only-runner || inputs.cache-size <= 0) }}
+        if: ${{ inputs.cache-volume && (inputs.read-only-label == '' || !contains(fromJSON(inputs.read-only-runner), inputs.read-only-label) || contains(fromJSON(inputs.build-runner), inputs.read-only-label) || inputs.cache-size <= 0) }}
         working-directory: ${{ github.workspace }}
         run: |
           echo "::error::Cache-volume callers must supply distinct read-only labels containing the final safety label, and an explicit positive cache size matching their rendered runner labels."
