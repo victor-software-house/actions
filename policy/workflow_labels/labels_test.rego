@@ -39,3 +39,8 @@ test_exception_applies if {
 		with data.workflow_exceptions.exceptions as {{"rule": "labels", "file": "ci.yml", "reason": "a runner another organization provides"}}
 	ex == {["labels"]}
 }
+
+test_runs_on_object_labels_are_checked if {
+	denied(f.edited("    runs-on: nscloud-ubuntu-24.04-amd64-2x4", "    runs-on:\n      group: builders\n      labels: [nscloud-ubuntu-24.04-amd64-2x8]"), f.labels) == {"job build runs on nscloud-ubuntu-24.04-amd64-2x8, which is not a GitHub-hosted runner and .github/actionlint.yaml does not list"}
+	count(denied(f.edited("    runs-on: nscloud-ubuntu-24.04-amd64-2x4", "    runs-on:\n      group: builders"), f.labels)) == 0
+}

@@ -66,3 +66,21 @@ test_job_gated_with_or_still_needs_the_skip if {
 test_job_gated_to_pull_request_still_needs_the_skip if {
 	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'pull_request'\n"))) == 2
 }
+
+test_status_function_overrides_the_skip if {
+	denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ always() }}")) == {"job build must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does"}
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: ${{ !github.event.pull_request.draft || always() }}\n"))) == 2
+}
+
+test_chain_of_needs_passes if {
+	chain := f.edited("    needs: changes", "    needs: changes\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n  build-two:\n    needs: changes")
+	count(denied(chain)) == 0
+}
+
+test_pull_request_target_still_needs_the_skip if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'pull_request_target'\n"))) == 2
+}
+
+test_negated_gate_still_needs_the_skip if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: ${{ !(github.event_name == 'schedule') }}\n"))) == 2
+}

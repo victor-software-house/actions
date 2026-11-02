@@ -45,6 +45,11 @@ as_labels(value) := json.unmarshal(value) if {
 
 as_labels(value) := value if is_array(value)
 
+# runs-on: {group: …, labels: …}; a group alone names no label to check.
+as_labels(value) := [value.labels] if is_string(value.labels)
+
+as_labels(value) := value.labels if is_array(value.labels)
+
 deny_labels contains msg if {
 	some name, job in lib.jobs
 	some label in labels(job)

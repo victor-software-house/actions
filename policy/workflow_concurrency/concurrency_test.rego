@@ -32,3 +32,7 @@ test_exception_applies if {
 		with data.workflow_exceptions.exceptions as {{"rule": "concurrency", "file": "ci.yml", "reason": "every run must finish"}}
 	ex == {["concurrency"]}
 }
+
+test_key_must_come_last if {
+	denied(f.edited("|| github.ref_name }}\n", "|| github.ref_name }}-${{ github.sha }}\n")) == {"concurrency.group must end in ${{ github.event.pull_request.number || github.ref_name }}"}
+}

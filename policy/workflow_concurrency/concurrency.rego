@@ -9,7 +9,9 @@ key := "github.event.pull_request.number || github.ref_name"
 deny_concurrency contains msg if {
 	lib.on_pull_request
 	# object.get, because a missing key would leave the comparison undefined.
-	not contains(object.get(lib.workflow, ["concurrency", "group"], ""), key)
+	# The key comes last: anything after it, such as the commit SHA, gives
+	# every push its own group, and no push cancels the run it replaces.
+	not endswith(trim_space(object.get(lib.workflow, ["concurrency", "group"], "")), sprintf("${{ %s }}", [key]))
 	msg := sprintf("concurrency.group must end in ${{ %s }}", [key])
 }
 
