@@ -145,12 +145,6 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'pull_request' && format('template-{0}', github.run_id) || format('template-report-{0}', inputs.working-directory) }}
     runs-on: ${{ inputs.runner }}
-    # The check installs only its own tools and must leave the checkout as
-    # Copier found it. With the lockfile on, mise 2026.10.25 writes a lock for
-    # each loaded config that has none, such as mise.ci.lock, and Copier then
-    # refuses the dirty repository.
-    env:
-      MISE_LOCKFILE: "false"
     defaults:
       run:
         # GitHub runs bash with pipefail only when the shell is named.
@@ -215,6 +209,10 @@ jobs:
           spec=$(mise tasks info template:check --json | jq -r '.tools | to_entries[] | "\(.key)@\(.value)"')
           mapfile -t tools <<<"$spec"
           mise install "${tools[@]}"
+          # mise 2026.10.25 writes a lock for each loaded config that has
+          # none, such as mise.ci.lock, and Copier refuses a dirty checkout.
+          # Tracked locks stay in effect; only the ones mise created go.
+          git ls-files -z --others --exclude-standard -- 'mise*.lock' '.mise*.lock' | xargs -0 -r rm -f
       - name: Template version
         env:
           # Only this step clones the template, so it alone carries the token.
