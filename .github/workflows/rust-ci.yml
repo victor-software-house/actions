@@ -244,7 +244,7 @@ jobs:
         if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 3
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
@@ -289,7 +289,7 @@ jobs:
         id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
@@ -305,7 +305,7 @@ jobs:
       - name: Install the tools without Rust
         if: needs.changes.outputs.build == 'false'
         timeout-minutes: 3
-        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
         env:
           MISE_DISABLE_TOOLS: rust
         with:
@@ -358,7 +358,7 @@ jobs:
         if: needs.changes.outputs.build != 'false' && !inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 7
-        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           working-directory: ${{ inputs.working-directory }}
           github-cache-mode: objects
@@ -377,7 +377,7 @@ jobs:
         if: needs.changes.outputs.build != 'false' && inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 2
-        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           working-directory: ${{ inputs.working-directory }}
           backend: local
@@ -606,7 +606,7 @@ jobs:
         if: ${{ !inputs.cache-volume }}
         continue-on-error: true
         timeout-minutes: 7
-        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           working-directory: ${{ inputs.working-directory }}
           github-cache-mode: objects
@@ -618,7 +618,7 @@ jobs:
         if: inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 2
-        uses: jdx/mr-boxington-action@47ce49b32025d93a7a2f4570815afaa2b7092240 # v1.7.2
+        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
         with:
           working-directory: ${{ inputs.working-directory }}
           backend: local
