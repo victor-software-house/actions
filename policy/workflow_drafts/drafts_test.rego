@@ -109,14 +109,19 @@ test_success_forms_override_the_skip if {
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ Always( ) }}"))) == 1
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ !(success() && github.event_name == 'merge_group') }}"))) == 1
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ success() }}"))) == 0
+	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ success() && !contains(github.actor, 'bot') }}"))) == 0
 }
 
 test_draft_condition_with_a_status_function_skips if {
 	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: ${{ !github.event.pull_request.draft && always() }}\n"))) == 0
 }
 
-test_not_equal_beside_an_event_gate_skips if {
-	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule' && github.actor != 'bot'\n"))) == 0
+# Only a gate that is exactly one event comparison counts.
+test_event_gate_with_other_terms_needs_the_skip if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule' && github.actor != 'bot'\n"))) == 2
+	not workflow_drafts.skips({"if": "true != (github.event_name == 'schedule')"})
+	not workflow_drafts.skips({"if": "github.event_name == 'schedule' == false"})
+	workflow_drafts.skips({"if": "${{ github.event_name == 'schedule' }}"})
 }
 
 test_not_equal_event_gate_alone_does_not_skip if {
@@ -125,4 +130,12 @@ test_not_equal_event_gate_alone_does_not_skip if {
 
 test_compared_parenthesised_gate_does_not_skip if {
 	not workflow_drafts.skips({"if": "${{ (github.event_name == 'schedule') != true }}"})
+}
+
+test_draft_condition_must_stand_as_a_term if {
+	workflow_drafts.skips({"if": "${{ !github.event.pull_request.draft }}"})
+	workflow_drafts.skips({"if": "github.event_name != 'push' && !github.event.pull_request.draft"})
+	not workflow_drafts.skips({"if": "${{ !github.event.pull_request.draft == false }}"})
+	not workflow_drafts.skips({"if": "${{ !(!github.event.pull_request.draft) }}"})
+	not workflow_drafts.skips({"if": "${{ !(github.actor == 'x' && !github.event.pull_request.draft) }}"})
 }
