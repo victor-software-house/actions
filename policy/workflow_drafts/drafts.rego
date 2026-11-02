@@ -39,8 +39,10 @@ skips(job) if {
 	gate := object.get(job, "if", "")
 	not contains(gate, "||")
 	bare := trim_space(trim_suffix(trim_prefix(trim_space(gate), "${{"), "}}"))
-	not regex.match(`[()]`, regex.replace(bare, `\w+\s*\(\s*\)`, ""))
-	some term in split(bare, "&&")
+	# A string literal holds no term, whatever its text.
+	unquoted := regex.replace(bare, `'[^']*'`, "''")
+	not regex.match(`[()]`, regex.replace(unquoted, `\w+\s*\(\s*\)`, ""))
+	some term in split(unquoted, "&&")
 	trim_space(term) == condition
 }
 
