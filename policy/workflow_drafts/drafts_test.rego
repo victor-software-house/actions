@@ -54,3 +54,15 @@ test_exception_names_its_file if {
 		with data.workflow_exceptions.exceptions as {{"rule": "drafts", "file": "release.yml", "reason": "tags only"}}
 	count(ex) == 0
 }
+
+test_job_gated_to_another_event_passes if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule'\n"))) == 0
+}
+
+test_job_gated_with_or_still_needs_the_skip if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule' || github.event_name == 'pull_request'\n"))) == 2
+}
+
+test_job_gated_to_pull_request_still_needs_the_skip if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'pull_request'\n"))) == 2
+}

@@ -12,6 +12,15 @@ condition := "!github.event.pull_request.draft"
 
 skips(job) if contains(object.get(job, "if", ""), condition)
 
+# A job gated to one event other than pull_request, such as a daily refresh
+# with if: github.event_name == 'schedule', never runs on a pull request.
+skips(job) if {
+	gate := object.get(job, "if", "")
+	not contains(gate, "||")
+	some match in regex.find_all_string_submatch_n(`github\.event_name\s*==\s*'([a-z_]+)'`, gate, -1)
+	match[1] != "pull_request"
+}
+
 needs(job) := [job.needs] if is_string(job.needs)
 
 needs(job) := job.needs if is_array(job.needs)
