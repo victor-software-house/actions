@@ -32,11 +32,14 @@ overrides_skip(job) if {
 
 # The draft condition skips drafts when it is one of the terms the if joins
 # with &&, even next to a status function: written exactly, not compared,
-# negated again, or beside an ||.
+# negated again, or beside an ||. The if may hold no parenthesis other than
+# an empty call such as always(), so no group or argument can hide the
+# condition inside a term that negates or compares it.
 skips(job) if {
 	gate := object.get(job, "if", "")
 	not contains(gate, "||")
 	bare := trim_space(trim_suffix(trim_prefix(trim_space(gate), "${{"), "}}"))
+	not regex.match(`[()]`, regex.replace(bare, `\w+\s*\(\s*\)`, ""))
 	some term in split(bare, "&&")
 	trim_space(term) == condition
 }

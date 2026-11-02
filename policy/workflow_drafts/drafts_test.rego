@@ -138,4 +138,7 @@ test_draft_condition_must_stand_as_a_term if {
 	not workflow_drafts.skips({"if": "${{ !github.event.pull_request.draft == false }}"})
 	not workflow_drafts.skips({"if": "${{ !(!github.event.pull_request.draft) }}"})
 	not workflow_drafts.skips({"if": "${{ !(github.actor == 'x' && !github.event.pull_request.draft) }}"})
+	not workflow_drafts.skips({"if": "${{ !(github.actor == 'x' && !github.event.pull_request.draft && github.ref != 'y') }}"})
+	not workflow_drafts.skips({"if": "${{ contains(github.ref, 'main') && !github.event.pull_request.draft }}"})
+	workflow_drafts.skips({"if": "${{ always() && !github.event.pull_request.draft }}"})
 }
