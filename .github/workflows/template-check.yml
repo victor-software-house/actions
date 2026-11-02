@@ -210,9 +210,13 @@ jobs:
           mapfile -t tools <<<"$spec"
           mise install "${tools[@]}"
           # mise 2026.10.25 writes a lock for each loaded config that has
-          # none, such as mise.ci.lock, and Copier refuses a dirty checkout.
-          # Tracked locks stay in effect; only the ones mise created go.
-          git ls-files -z --others --exclude-standard -- 'mise*.lock' '.mise*.lock' | xargs -0 -r rm -f
+          # none, such as mise.ci.lock, and may rewrite a tracked one; Copier
+          # refuses a dirty checkout. Tracked locks stay in effect for the
+          # install. The repository's own lock checks judge its locks, so this
+          # check removes the locks mise created and restores the ones it
+          # changed.
+          git ls-files -z --others --exclude-standard -- ':(glob)**/mise*.lock' ':(glob)**/.mise*.lock' | xargs -0 -r rm -f
+          git ls-files -z --modified -- ':(glob)**/mise*.lock' ':(glob)**/.mise*.lock' | xargs -0 -r git checkout --
       - name: Template version
         env:
           # Only this step clones the template, so it alone carries the token.
