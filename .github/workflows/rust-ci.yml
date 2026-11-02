@@ -704,11 +704,14 @@ jobs:
             exit 1
           fi
           read -r workflow sha event branch <<<"$run"
-          if ! newer=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$sha&event=$event&per_page=100" \
-            --jq "[.workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID and .head_branch == \"$branch\")] | length"); then
+          # The branch name is compared here, never spliced into the jq program,
+          # because a pull request's author chooses it.
+          if ! branches=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$sha&event=$event&per_page=100" \
+            --jq ".workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID) | .head_branch"); then
             echo "A job was cancelled, and the runs for $sha cannot be listed."
             exit 1
           fi
+          newer=$(printf '%s\n' "$branches" | grep -Fxc -- "$branch" || true)
           if [ "$newer" -gt 0 ]; then
             echo "A job was cancelled because a newer run for $sha replaced this one; it reports instead."
             exit 0
