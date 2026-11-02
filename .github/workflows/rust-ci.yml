@@ -639,12 +639,24 @@ jobs:
   # required, an upstream failure would skip it and read as green; this job
   # runs always() so that cannot happen, and its name keeps the required
   # check `verify / Verify` while the jobs behind it change.
+  #
+  # One push can start two runs for the same head commit: force-pushing a
+  # stacked pull request's head and its base, which is another pull request's
+  # head, in one push gives the pull request two `synchronize` events. The
+  # caller's concurrency group cancels the older run, and this job, running
+  # always(), would report it as failed, which a re-run of the whole workflow
+  # then clears. So a cancelled result passes only when a newer run of this
+  # workflow, for the same event and head commit, exists to report instead.
+  # A run cancelled by hand, or a job cancelled by its timeout, still fails.
   verify:
     name: Verify
     needs: [changes, static, build, publish]
     if: ${{ always() && !github.event.pull_request.draft }}
     runs-on: ${{ inputs.light-runner }}
     timeout-minutes: 2
+    # Reads this run and its newer runs; the caller grants it.
+    permissions:
+      actions: read
     steps:
       - name: Report the jobs
         shell: bash
@@ -652,10 +664,37 @@ jobs:
           STATIC: ${{ needs.static.result }}
           BUILD: ${{ needs.build.result }}
           PUBLISH: ${{ needs.publish.result }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           echo "Static checks: $STATIC; Build and test: $BUILD; Publish checks: $PUBLISH"
+          cancelled=false
           for result in "$STATIC" "$BUILD" "$PUBLISH"; do
-            if [ "$result" = failure ] || [ "$result" = cancelled ]; then
+            if [ "$result" = failure ]; then
               exit 1
             fi
+            if [ "$result" = cancelled ]; then
+              cancelled=true
+            fi
           done
+          if [ "$cancelled" = false ]; then
+            exit 0
+          fi
+          if ! run=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" \
+            --jq '"\(.workflow_id) \(.head_sha) \(.event)"'); then
+            echo "A job was cancelled, and this run cannot be read to look for a newer one."
+            exit 1
+          fi
+          read -r workflow sha event <<<"$run"
+          if ! newer=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$sha&event=$event&per_page=100" \
+            --jq "[.workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID)] | length"); then
+            echo "A job was cancelled, and the runs for $sha cannot be listed."
+            exit 1
+          fi
+          if [ "$newer" -gt 0 ]; then
+            echo "A job was cancelled because a newer run for $sha replaced this one; it reports instead."
+            exit 0
+          fi
+          echo "A job was cancelled, and no newer run for $sha replaces this one."
+          exit 1
