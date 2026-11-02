@@ -1,4 +1,4 @@
-min_version = "2026.10.17"
+min_version = "2026.10.25"
 
 [settings]
 lockfile = true
@@ -16,7 +16,7 @@ yq = "4.54.1"
 # check:docs-probes runs the catalog's check:docs, which reads cargo metadata
 # with jq. Only cargo metadata --no-deps runs on the probe crates, so nothing
 # compiles here.
-rust = { version = "1.99.0", profile = "minimal" }
+rust = { version = "1.99.1", profile = "minimal" }
 jq = "1.8.2"
 
 # mise-tasks/ holds this repository's own checks, named by their paths.

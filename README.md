@@ -85,7 +85,7 @@ jobs:
   verify:
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
     with:
-      mise-version: 2026.10.17
+      mise-version: 2026.10.25
 ```
 
 The caller supplies final build labels as JSON in `build-runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
@@ -226,7 +226,7 @@ jobs:
       contents: read
       issues: write
     with:
-      mise-version: 2026.10.17
+      mise-version: 2026.10.25
     secrets:
       TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 ```
@@ -278,7 +278,7 @@ jobs:
   secrets:
     uses: victor-software-house/actions/.github/workflows/secrets.yml@<commit> # <tag>
     with:
-      mise-version: 2026.10.17
+      mise-version: 2026.10.25
 ```
 
 A pull request scans only its own commits, from its base to its head; a
