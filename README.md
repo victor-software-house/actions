@@ -14,6 +14,7 @@ only the line that pins it.
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 | `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
+| `policy/` | The workflow policy: five Rego packages, one per rule, that conftest pulls by commit and runs over a repository's workflows |
 | `macos-signing/` | The signing actions: `macos-signing` loads the CI Developer ID identities and the notary key from 1Password into a temporary keychain, `macos-signing/delete` removes them |
 
 ## Use the Rust catalog
@@ -383,6 +384,46 @@ in, and runs `copier update --vcs-ref=:current:`.
 A file the repository kept comes back with inline conflict markers between
 its copy and the template's; the task fails and `git diff --check` lists them.
 
+## Check workflows against the policy
+
+`policy/` holds one Rego package per rule, and a repository picks the ones it
+runs:
+
+| Package | Rule |
+|:--|:--|
+| `workflow_drafts` | A workflow on `pull_request` lists `opened`, `synchronize`, `reopened` and `ready_for_review`, and each job skips drafts with `if: ${{ !github.event.pull_request.draft }}` or needs a job that does |
+| `workflow_concurrency` | A workflow on `pull_request` groups runs by `${{ github.event.pull_request.number \|\| github.ref_name }}` and cancels the run a new push replaces |
+| `workflow_labels` | Every `runs-on` label, and every `runner` or `*-runner` input to a reusable workflow, is a standard GitHub-hosted runner or one `.github/actionlint.yaml` lists |
+| `workflow_permissions` | The top-level `permissions` map each scope to `read` or `none`; a job that writes maps its own scopes |
+| `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
+
+`workflow_lib` holds what the rules share. conftest reads each workflow on its
+own through its ignore parser, so the pins rule sees the comments and the
+other rules read the same text as YAML. A repository needs no copy: conftest
+pulls the policy by commit into the git directory and runs the chosen
+namespaces, with `actionlint.yaml` as data:
+
+```sh
+conftest test --parser ignore \
+  --update 'git::https://github.com/victor-software-house/actions.git//policy?ref=<commit>' \
+  -p "$(git rev-parse --git-path workflow-policy)" -p .github/workflow-policy \
+  --data .github/actionlint.yaml \
+  --namespace workflow_drafts --namespace workflow_pins \
+  .github/workflows
+```
+
+A repository's exceptions are a package `workflow_exceptions` in its own
+`.github/workflow-policy/`: each entry names the rule, the workflow file and a
+reason, and an entry with no reason excepts nothing.
+
+```rego
+package workflow_exceptions
+
+import rego.v1
+
+exceptions contains {"rule": "permissions", "file": "release.yml", "reason": "publishes the release with the workflow token"}
+```
+
 ## Releases
 
 Tags are annotated, move by patch only from `v0.0.1`, sit on a merged `main`
@@ -398,4 +439,5 @@ Pin the commit a tag names, with the tag as a comment.
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
 | `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.28's catalog, apart from `format`, the `test` command without `--lib`, the added `doc` and `check:docs`, and the `check:versions` guard; the catalog names no toolchain version |
+| `check:policy` | `conftest verify`: every rule in `policy/` passes its tests, including a failing case per rule |
 | `check:docs-probes` | The catalog's `check:docs` fails each probe crate that breaks the docs standard and passes each that keeps it; only `cargo metadata --no-deps` runs, so nothing compiles |
