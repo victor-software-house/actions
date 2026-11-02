@@ -15,7 +15,11 @@ condition := "!github.event.pull_request.draft"
 # success() when negated or beside an ||. Function names ignore case.
 overrides_skip(job) if regex.match(`(?i)(always|cancelled|failure)\s*\(\s*\)`, object.get(job, "if", ""))
 
-overrides_skip(job) if regex.match(`(?i)!\s*success\s*\(\s*\)`, object.get(job, "if", ""))
+overrides_skip(job) if {
+	gate := object.get(job, "if", "")
+	regex.match(`(?i)success\s*\(\s*\)`, gate)
+	regex.match(`![^=]`, gate)
+}
 
 overrides_skip(job) if {
 	gate := object.get(job, "if", "")
@@ -33,12 +37,15 @@ skips(job) if {
 
 # A job gated to one event that no pull request raises, such as a daily
 # refresh with if: github.event_name == 'schedule', never runs on a draft.
-# The gate holds no logical ! (a != is fine) or ||, so the comparison is
-# what decides, and every pull_request* event counts as a pull request.
+# The gate holds no logical ! (a != between a context and a literal is
+# fine), no comparison of a parenthesised expression, and no ||, so the
+# comparison is what decides; every pull_request* event counts as a pull
+# request.
 skips(job) if {
 	gate := object.get(job, "if", "")
 	not contains(gate, "||")
 	not regex.match(`![^=]`, gate)
+	not regex.match(`\)\s*[!=]=`, gate)
 	some match in regex.find_all_string_submatch_n(`github\.event_name\s*==\s*'([a-z_]+)'`, gate, -1)
 	not startswith(match[1], "pull_request")
 }

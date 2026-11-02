@@ -107,6 +107,7 @@ test_success_forms_override_the_skip if {
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ !success() }}"))) == 1
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ success() || github.event_name == 'merge_group' }}"))) == 1
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ Always( ) }}"))) == 1
+	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ !(success() && github.event_name == 'merge_group') }}"))) == 1
 	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ success() }}"))) == 0
 }
 
@@ -116,4 +117,12 @@ test_draft_condition_with_a_status_function_skips if {
 
 test_not_equal_beside_an_event_gate_skips if {
 	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule' && github.actor != 'bot'\n"))) == 0
+}
+
+test_not_equal_event_gate_alone_does_not_skip if {
+	not workflow_drafts.skips({"if": "github.event_name != 'push'"})
+}
+
+test_compared_parenthesised_gate_does_not_skip if {
+	not workflow_drafts.skips({"if": "${{ (github.event_name == 'schedule') != true }}"})
 }
