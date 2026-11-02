@@ -83,10 +83,17 @@ pins:
 ```yaml
 jobs:
   verify:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
     with:
       mise-version: 2026.10.25
 ```
+
+A reusable workflow gets no permission its caller withholds: `Changes` and `Static checks` read the pull request, and `Verify` reads the run and its newer runs (`actions: read`).
+GitHub refuses to start the workflow when the caller withholds one of them, so a caller grants `actions: read` in the same change that moves its pin to a commit whose `Verify` asks for it.
 
 The caller supplies final build labels as JSON in `build-runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
 Repository visibility, provider selection and machine sizes are resolved when the caller is rendered, not by this workflow.
@@ -154,7 +161,7 @@ The jobs, which run in parallel after `Changes`:
 | `Build and test` | final `build-runner` or `read-only-runner` labels; light for documentation-only changes | `mise run verify` |
 | `Static checks` | `light-runner` | configured static checks, then advisories |
 | `Publish checks` | `read-only-runner` | with `semver`: API and package checks |
-| `Verify` | `light-runner` | fails when a required job failed or was cancelled |
+| `Verify` | `light-runner` | fails when a required job failed or was cancelled, unless the whole run was cancelled and a newer run of the workflow for the same event, branch and head commit replaced it |
 
 The caller chooses every label at apply time. Runtime choices only reflect
 the event or changed files, such as read-only cache safety for pull requests.

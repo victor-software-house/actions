@@ -1,0 +1,3 @@
+# Scratch output of the repository's own checks: check:runners writes the
+# cache guard's log under target/.
+/target/
