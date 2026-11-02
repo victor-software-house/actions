@@ -10,26 +10,35 @@ types := [] if not is_object(lib.triggers)
 
 condition := "!github.event.pull_request.draft"
 
-# A status function such as always() makes a job run when the jobs it needs
-# were skipped, and an || can bypass the draft condition beside it.
-overrides_skip(job) if regex.match(`(always|cancelled|failure)\(\)`, object.get(job, "if", ""))
+# A status function in a job's if stops GitHub skipping the job when a job
+# it needs was skipped: always(), cancelled() and failure() outright, and
+# success() when negated or beside an ||. Function names ignore case.
+overrides_skip(job) if regex.match(`(?i)(always|cancelled|failure)\s*\(\s*\)`, object.get(job, "if", ""))
 
+overrides_skip(job) if regex.match(`(?i)!\s*success\s*\(\s*\)`, object.get(job, "if", ""))
+
+overrides_skip(job) if {
+	gate := object.get(job, "if", "")
+	regex.match(`(?i)success\s*\(\s*\)`, gate)
+	contains(gate, "||")
+}
+
+# The draft condition decides only with no || beside it; joined with && it
+# skips drafts even next to a status function.
 skips(job) if {
 	gate := object.get(job, "if", "")
 	contains(gate, condition)
 	not contains(gate, "||")
-	not overrides_skip(job)
 }
 
 # A job gated to one event that no pull request raises, such as a daily
 # refresh with if: github.event_name == 'schedule', never runs on a draft.
-# The gate holds no negation or ||, so the comparison is what decides, and
-# every pull_request* event counts as a pull request.
+# The gate holds no logical ! (a != is fine) or ||, so the comparison is
+# what decides, and every pull_request* event counts as a pull request.
 skips(job) if {
 	gate := object.get(job, "if", "")
 	not contains(gate, "||")
-	not contains(gate, "!")
-	not overrides_skip(job)
+	not regex.match(`![^=]`, gate)
 	some match in regex.find_all_string_submatch_n(`github\.event_name\s*==\s*'([a-z_]+)'`, gate, -1)
 	not startswith(match[1], "pull_request")
 }
@@ -39,8 +48,13 @@ needs(job) := [job.needs] if is_string(job.needs)
 needs(job) := job.needs if is_array(job.needs)
 
 # GitHub skips a job whose needs were skipped, through any chain of needs,
-# unless the job's own if calls a status function.
-graph_of_needs := {name: object.get(needs_of, name, []) | some name, _ in lib.jobs}
+# unless the job's own if calls a status function: such a job runs, so the
+# skip stops there and passes on to nothing that needs it.
+graph_of_needs := {name: passed_on(name, job) | some name, job in lib.jobs}
+
+passed_on(name, job) := [] if overrides_skip(job)
+
+passed_on(name, job) := object.get(needs_of, name, []) if not overrides_skip(job)
 
 needs_of := {name: needs(job) | some name, job in lib.jobs}
 

@@ -84,3 +84,36 @@ test_pull_request_target_still_needs_the_skip if {
 test_negated_gate_still_needs_the_skip if {
 	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: ${{ !(github.event_name == 'schedule') }}\n"))) == 2
 }
+
+test_chain_without_a_skipper_fails if {
+	chain := f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n")
+	denied(chain) == {
+		"job changes must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
+		"job build must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
+		"job deploy must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
+	}
+}
+
+# build runs with always(), so deploy, which needs it, runs on drafts too.
+test_status_function_in_the_chain_stops_the_skip if {
+	chain := f.edited("    needs: changes", "    needs: changes\n    if: ${{ always() }}\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n  later:\n    needs: changes")
+	denied(chain) == {
+		"job build must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
+		"job deploy must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
+	}
+}
+
+test_success_forms_override_the_skip if {
+	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ !success() }}"))) == 1
+	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ success() || github.event_name == 'merge_group' }}"))) == 1
+	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ Always( ) }}"))) == 1
+	count(denied(f.edited("    needs: changes", "    needs: changes\n    if: ${{ success() }}"))) == 0
+}
+
+test_draft_condition_with_a_status_function_skips if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: ${{ !github.event.pull_request.draft && always() }}\n"))) == 0
+}
+
+test_not_equal_beside_an_event_gate_skips if {
+	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule' && github.actor != 'bot'\n"))) == 0
+}
