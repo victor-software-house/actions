@@ -18,6 +18,8 @@ yq = "4.54.1"
 # compiles here.
 rust = { version = "1.99.1", profile = "minimal" }
 jq = "1.8.2"
+# check:policy runs the tests of the workflow policy in policy/.
+conftest = "0.71.1"
 
 # mise-tasks/ holds this repository's own checks, named by their paths.
 [task_config]
@@ -25,4 +27,4 @@ includes = ["mise-tasks"]
 
 [tasks.verify]
 description = "Every check CI runs"
-depends = ["lint:workflows", "check:pins", "check:catalog", "check:docs-probes", "check:runners"]
+depends = ["lint:workflows", "check:pins", "check:catalog", "check:docs-probes", "check:runners", "check:policy"]
