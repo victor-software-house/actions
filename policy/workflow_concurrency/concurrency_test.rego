@@ -11,7 +11,7 @@ denied(input_lines) := result if {
 test_valid_workflow_passes if count(denied(f.lines(f.workflow))) == 0
 
 test_group_per_commit_fails if {
-	denied(f.edited("${{ github.event.pull_request.number || github.ref_name }}", "${{ github.sha }}")) == {"concurrency.group must end in ${{ github.event.pull_request.number || github.ref_name }}"}
+	denied(f.edited("${{ github.event.pull_request.number || github.ref_name }}", "${{ github.sha }}")) == {"concurrency.group must end in ${{ github.event.pull_request.number || github.ref_name }}, optionally followed by ${{ github.event.pull_request.draft && '-draft' || '' }}"}
 }
 
 test_no_cancel_fails if {
@@ -34,5 +34,13 @@ test_exception_applies if {
 }
 
 test_key_must_come_last if {
-	denied(f.edited("|| github.ref_name }}\n", "|| github.ref_name }}-${{ github.sha }}\n")) == {"concurrency.group must end in ${{ github.event.pull_request.number || github.ref_name }}"}
+	denied(f.edited("|| github.ref_name }}\n", "|| github.ref_name }}-${{ github.sha }}\n")) == {"concurrency.group must end in ${{ github.event.pull_request.number || github.ref_name }}, optionally followed by ${{ github.event.pull_request.draft && '-draft' || '' }}"}
+}
+
+test_draft_suffix_passes if {
+	count(denied(f.edited("|| github.ref_name }}\n", "|| github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}\n"))) == 0
+}
+
+test_anything_after_the_draft_suffix_fails if {
+	denied(f.edited("|| github.ref_name }}\n", "|| github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}-${{ github.sha }}\n")) == {"concurrency.group must end in ${{ github.event.pull_request.number || github.ref_name }}, optionally followed by ${{ github.event.pull_request.draft && '-draft' || '' }}"}
 }
