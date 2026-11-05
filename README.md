@@ -14,7 +14,7 @@ only the line that pins it.
 | `tasks/template.toml` | `template:check`, which fails when the newest tag of the repository's Copier template would change it, and `template:off` and `template:on`, which turn template pieces off and on |
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 | `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
-| `policy/` | The workflow policy: five Rego packages, one per rule, that conftest pulls by commit and runs over a repository's workflows |
+| `policy/` | The workflow policy: six Rego packages, one per rule, that conftest pulls by commit and runs over a repository's workflows |
 | `macos-signing/` | The signing actions: `macos-signing` loads the CI Developer ID identities and the notary key from 1Password into a temporary keychain, `macos-signing/delete` removes them |
 
 ## Use the Rust catalog
@@ -396,6 +396,7 @@ runs:
 | `workflow_labels` | Every `runs-on` label, and every `runner` or `*-runner` input to a reusable workflow, is a standard GitHub-hosted runner or one `.github/actionlint.yaml` lists |
 | `workflow_permissions` | The top-level `permissions` map each scope to `read` or `none`; a job that writes maps its own scopes |
 | `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
+| `workflow_mise_env` | Every step that runs mise, through `jdx/mise-action` or a `mise` command, loads the `ci` profile: `MISE_ENV` is `ci`, or starts with `ci,`, in the step's, the job's or the workflow's `env`, so a runner never installs the tools of `mise.dev.toml` |
 
 `workflow_lib` holds what the rules share. conftest reads each workflow on its
 own through its ignore parser, so the pins rule sees the comments and the
