@@ -85,6 +85,8 @@ calls := [
 	"echo `mise which go`",
 	# Found on purpose: the rule errs toward finding.
 	"rm -rf ~/.cache/mise",
+	`grep -c "mise" mise.lock`,
+	"wc -c 'mise'",
 ]
 
 not_calls := [
