@@ -28,6 +28,11 @@ accepted(value) if {
 	startswith(value, concat("", [profile, ","]))
 }
 
+# An expression resolves at run time, such as a reusable workflow's
+# MISE_ENV: ${{ inputs.mise-env }}, so it is not checked here, as the labels
+# rule leaves expressions alone.
+accepted(value) if contains(value, "${{")
+
 # A workflow the exempt parameter names may also set the values it lists.
 accepted(value) if {
 	some entry in lib.param("mise_env", "exempt")

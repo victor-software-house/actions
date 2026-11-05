@@ -106,3 +106,7 @@ test_each_non_call_passes if {
 		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)]))) == {step_2}
 	}
 }
+
+test_expression_is_not_checked if {
+	count(denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ${{ inputs.mise-env }}\n"))) == 0
+}
