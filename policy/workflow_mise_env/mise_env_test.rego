@@ -60,3 +60,15 @@ test_exception_applies if {
 		with data.workflow_exceptions.exceptions as {{"rule": "mise_env", "file": "ci.yml", "reason": "runs the dev profile's gitleaks"}}
 	ex == {["mise_env"]}
 }
+
+# GitHub takes the nearest env: a step's dev beats the workflow's ci.
+test_step_profile_overrides_the_workflow if {
+	workflow_ci := concat("\n", [l.Original | some l in lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ci\n")])
+	denied(f.lines(replace(workflow_ci, "      - run: mise install --locked", "      - run: mise install --locked\n        env:\n          MISE_ENV: dev"))) == {"job build, step 3 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"}
+}
+
+test_mise_behind_a_quote_a_path_or_at_the_end_fails if {
+	every run in [`bash -c "mise install"`, "~/.local/bin/mise install", "cd tools && mise"] {
+		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [run]))) == missing
+	}
+}

@@ -9,21 +9,22 @@ import rego.v1
 
 runs_mise(step) if startswith(object.get(step, "uses", ""), "jdx/mise-action@")
 
-# mise as a command word: at the start, or after a space, a separator or an
-# opening parenthesis. mise.lock and mise-tasks/ are not commands.
-runs_mise(step) if regex.match(`(^|[\s;&|(])mise\s`, object.get(step, "run", ""))
+# mise as a command word: at the start, or after a space, a separator, an
+# opening parenthesis, a quote or a path, and before a space, a closing quote
+# or the end. mise.lock and mise-tasks/ are not commands.
+runs_mise(step) if regex.match(`(^|[\s;&|("'/])mise(\s|["']|$)`, object.get(step, "run", ""))
 
 # ci alone, or ci first among several profiles, such as ci,release.
-ci_profile(env) if env.MISE_ENV == "ci"
+ci_profile(value) if value == "ci"
 
-ci_profile(env) if startswith(env.MISE_ENV, "ci,")
+ci_profile(value) if startswith(value, "ci,")
 
-# The step's own env, its job's, or the workflow's.
-loads_ci(job, step) if ci_profile(object.get(step, "env", {}))
+# GitHub resolves an env key from the step, then the job, then the workflow,
+# so only the nearest MISE_ENV counts: a step that sets dev under a workflow
+# that sets ci loads dev.
+effective(job, step) := object.get(step, ["env", "MISE_ENV"], object.get(job, ["env", "MISE_ENV"], object.get(lib.workflow, ["env", "MISE_ENV"], "")))
 
-loads_ci(job, step) if ci_profile(object.get(job, "env", {}))
-
-loads_ci(job, step) if ci_profile(object.get(lib.workflow, "env", {}))
+loads_ci(job, step) if ci_profile(effective(job, step))
 
 deny_mise_env contains msg if {
 	some name, job in lib.jobs
