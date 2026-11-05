@@ -396,7 +396,7 @@ runs:
 | `workflow_labels` | Every `runs-on` label, and every `runner` or `*-runner` input to a reusable workflow, is a standard GitHub-hosted runner or one `.github/actionlint.yaml` lists |
 | `workflow_permissions` | The top-level `permissions` map each scope to `read` or `none`; a job that writes maps its own scopes |
 | `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
-| `workflow_mise_env` | Every step that runs mise, through `jdx/mise-action` or a `mise` command, loads the `ci` profile: the nearest `MISE_ENV` (the step's, else the job's, else the workflow's) is `ci` or starts with `ci,`, so a runner never installs the tools of `mise.dev.toml`; `secrets.yml`, the credential scan, may set `dev,hooks` |
+| `workflow_mise_env` | Every step that runs mise, through `jdx/mise-action` or a `mise` command, loads the `ci` profile: the nearest `MISE_ENV` (the step's, else the job's, else the workflow's) is `ci` or starts with `ci,`, so a runner never installs the tools of `mise.dev.toml`; a run script may not override it by assigning `MISE_ENV` inline or in `$GITHUB_ENV`, passing `mise -E`/`--env`, or unsetting it; `secrets.yml`, the credential scan, may set `dev,hooks` |
 
 `workflow_lib` holds what the rules share. conftest reads each workflow on its
 own through its ignore parser, so the pins rule sees the comments and the

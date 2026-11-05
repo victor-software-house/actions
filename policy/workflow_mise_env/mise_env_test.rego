@@ -125,3 +125,41 @@ test_caller_passing_ci_passes if {
 test_caller_passing_nothing_fails if {
 	count(denied(f.edited("    with:\n      light-runner:", "    with:\n      mise-env:\n      light-runner:"))) == 1
 }
+
+# The fixture with the workflow's env set to ci and the mise install step
+# replaced by run, so only the run script's own overrides can fail.
+ci_run(run) := lines_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)]))
+
+ci_workflow(run) := f.lines(replace(concat("\n", [l.Original | some l in ci_run(run)]), "permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ci\n"))
+
+test_inline_profile_fails if {
+	denied(ci_workflow("MISE_ENV=dev mise install")) == {"job build, step 3 sets MISE_ENV=dev in its run script"}
+}
+
+test_github_env_profile_fails if {
+	denied(ci_workflow(`echo MISE_ENV=dev >> "$GITHUB_ENV"`)) == {"job build, step 3 sets MISE_ENV=dev in its run script"}
+}
+
+test_inline_ci_profile_passes if count(denied(ci_workflow("MISE_ENV=ci,release mise install"))) == 0
+
+test_longer_variable_name_passes if count(denied(ci_workflow("MY_MISE_ENV=dev mise install"))) == 0
+
+test_env_flag_fails if {
+	every run in ["mise --env dev install", "mise -E dev install", "mise -C sub -E dev install", "mise -q --env=dev run x"] {
+		denied(ci_workflow(run)) == {"job build, step 3 runs mise --env dev"}
+	}
+}
+
+test_env_flag_of_another_program_passes if {
+	every run in ["mise exec -- grep -E foo x", "mise run deploy --env prod", "mise --env ci install"] {
+		count(denied(ci_workflow(run))) == 0
+	}
+}
+
+test_unset_fails if {
+	every run in ["unset MISE_ENV", "env -u MISE_ENV mise install", "env --unset=MISE_ENV mise install"] {
+		denied(ci_workflow(run)) == {"job build, step 3 unsets MISE_ENV in its run script"}
+	}
+}
+
+test_unset_other_variable_passes if count(denied(ci_workflow("unset OTHER; mise install"))) == 0

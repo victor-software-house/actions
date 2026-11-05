@@ -71,3 +71,39 @@ deny_mise_env contains msg if some msg in lib.denied("mise_env", finding)
 deny_mise_env contains lib.unloaded_message if lib.unloaded("mise_env")
 
 warn_mise_env contains msg if some msg in lib.warned("mise_env", finding)
+
+# A run script overrides every env: map above it when it assigns MISE_ENV
+# inline or writes it to $GITHUB_ENV, passes mise -E or --env, or unsets
+# MISE_ENV, which falls back to .miserc.toml's dev. OPA's RE2 has no
+# lookahead, so each value is matched and then checked.
+inline_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^A-Za-z0-9_])MISE_ENV=["']?([^\s"';&|]*)`, run, -1)]
+
+# mise reads -E and --env only before its subcommand, among its own flags
+# (each a -flag, with or without a value), so a -E after exec, run or a task
+# name belongs to another program and is not matched.
+flag_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[\s;&|(])mise(?:\s+-[^\sE=-][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?|\s+--[^\s=e][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?)*\s+(?:-E[\s=]*|--env[\s=]+)["']?([^\s"';&|]*)`, run, -1)]
+
+unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|$)|(^|\s)(?:-u\s*|--unset[\s=]+)MISE_ENV([\s;&|]|$)`, run)
+
+finding contains {"msg": msg, "job": name, "step": step} if {
+	some name, job in lib.jobs
+	some i, step in object.get(job, "steps", [])
+	some value in inline_values(object.get(step, "run", ""))
+	not accepted(value)
+	msg := sprintf("job %s, step %d sets MISE_ENV=%s in its run script", [name, i + 1, value])
+}
+
+finding contains {"msg": msg, "job": name, "step": step} if {
+	some name, job in lib.jobs
+	some i, step in object.get(job, "steps", [])
+	some value in flag_values(object.get(step, "run", ""))
+	not accepted(value)
+	msg := sprintf("job %s, step %d runs mise --env %s", [name, i + 1, value])
+}
+
+finding contains {"msg": msg, "job": name, "step": step} if {
+	some name, job in lib.jobs
+	some i, step in object.get(job, "steps", [])
+	unsets(object.get(step, "run", ""))
+	msg := sprintf("job %s, step %d unsets MISE_ENV in its run script", [name, i + 1])
+}
