@@ -1,0 +1,58 @@
+# The workflow policy's parameters, which conftest loads with --data. A
+# repository replaces any of them in its own config file
+# (.github/workflow-policy/config.yaml in a templated repository) under
+# workflow_policy.<rule>.<name>; a value there replaces the default whole,
+# so a list is restated in full.
+workflow_policy_defaults:
+  drafts:
+    # The pull_request types a workflow lists, so marking a draft ready
+    # starts the run.
+    types: [opened, synchronize, reopened, ready_for_review]
+    # The term a job's if joins with && to skip draft pull requests.
+    condition: "!github.event.pull_request.draft"
+  concurrency:
+    # A pull-request workflow's concurrency.group ends in one of these, so a
+    # new push cancels the run it replaces. A draft push and the
+    # ready_for_review event after it are both pull_request events for one
+    # number; the draft suffix keeps the draft run, which only skips, out of
+    # the ready run's group, so it cannot cancel it.
+    endings:
+      - "${{ github.event.pull_request.number || github.ref_name }}"
+      - "${{ github.event.pull_request.number || github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}"
+  labels:
+    # GitHub's standard hosted runners. Larger runners bill even on public
+    # repositories, so they are not listed.
+    hosted:
+      - ubuntu-latest
+      - ubuntu-24.04
+      - ubuntu-22.04
+      - ubuntu-24.04-arm
+      - ubuntu-22.04-arm
+      - ubuntu-slim
+      - macos-latest
+      - macos-26
+      - macos-15
+      - macos-14
+      - windows-latest
+      - windows-2025
+      - windows-2022
+      - windows-11-arm
+    # Labels accepted beside the hosted ones and those .github/actionlint.yaml
+    # lists.
+    allowed: []
+  permissions:
+    # The levels a top-level permission scope may take.
+    top_level: [read, none]
+  pins:
+    # owner/repo[/path]@<commit SHA>, then a comment naming the release
+    # (# v1.2.3) or the branch and the day it was read (# main, 2026-11-02).
+    pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40} # (v[0-9]+(\.[0-9]+)*|[A-Za-z0-9_./-]+, [0-9]{4}-[0-9]{2}-[0-9]{2})$'
+  mise_env:
+    # The profiles a step that runs mise may load: each alone, or first among
+    # several, such as ci,release.
+    profiles: [ci]
+    # Workflows that run another profile on purpose, and the MISE_ENV values
+    # they may set. The shared credential scan runs mise.dev.toml's gitleaks.
+    exempt:
+      - file: secrets.yml
+        profiles: ["dev,hooks"]

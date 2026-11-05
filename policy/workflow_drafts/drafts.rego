@@ -8,7 +8,7 @@ types := object.get(lib.triggers, ["pull_request", "types"], []) if is_object(li
 
 types := [] if not is_object(lib.triggers)
 
-condition := "!github.event.pull_request.draft"
+condition := lib.param("drafts", "condition")
 
 # A status function in a job's if stops GitHub skipping the job when a job
 # it needs was skipped: always(), cancelled() and failure() outright, and
@@ -39,6 +39,7 @@ skips(job) if {
 	gate := object.get(job, "if", "")
 	not contains(gate, "||")
 	bare := trim_space(trim_suffix(trim_prefix(trim_space(gate), "${{"), "}}"))
+
 	# A string literal holds no term, whatever its text.
 	unquoted := regex.replace(bare, `'[^']*'`, "''")
 	not regex.match(`[()]`, regex.replace(unquoted, `\w+\s*\(\s*\)`, ""))
@@ -79,14 +80,14 @@ needs_skipper(job) if {
 	skips(lib.jobs[reached])
 }
 
-deny_drafts contains msg if {
+finding contains {"msg": msg} if {
 	lib.on_pull_request
-	some type in ["opened", "synchronize", "reopened", "ready_for_review"]
+	some type in lib.param("drafts", "types")
 	not type in types
 	msg := sprintf("pull_request types must list %s, so marking a draft ready starts the run", [type])
 }
 
-deny_drafts contains msg if {
+finding contains {"msg": msg, "job": name} if {
 	lib.on_pull_request
 	some name, job in lib.jobs
 	not skips(job)
@@ -94,4 +95,8 @@ deny_drafts contains msg if {
 	msg := sprintf("job %s must skip drafts with if: ${{ %s }}, or need a job that does", [name, condition])
 }
 
-exception contains ["drafts"] if lib.excepted("drafts")
+deny_drafts contains msg if some msg in lib.denied("drafts", finding)
+
+deny_drafts contains lib.unloaded_message if lib.unloaded("drafts")
+
+warn_drafts contains msg if some msg in lib.warned("drafts", finding)

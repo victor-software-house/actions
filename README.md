@@ -396,34 +396,64 @@ runs:
 | `workflow_labels` | Every `runs-on` label, and every `runner` or `*-runner` input to a reusable workflow, is a standard GitHub-hosted runner or one `.github/actionlint.yaml` lists |
 | `workflow_permissions` | The top-level `permissions` map each scope to `read` or `none`; a job that writes maps its own scopes |
 | `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
-| `workflow_mise_env` | Every step that runs mise, through `jdx/mise-action` or a `mise` command, loads the `ci` profile: `MISE_ENV` is `ci`, or starts with `ci,`, in the step's, the job's or the workflow's `env`, so a runner never installs the tools of `mise.dev.toml` |
+| `workflow_mise_env` | Every step that runs mise, through `jdx/mise-action` or a `mise` command, loads the `ci` profile: the nearest `MISE_ENV` (the step's, else the job's, else the workflow's) is `ci` or starts with `ci,`, so a runner never installs the tools of `mise.dev.toml`; `secrets.yml`, the credential scan, may set `dev,hooks` |
 
 `workflow_lib` holds what the rules share. conftest reads each workflow on its
 own through its ignore parser, so the pins rule sees the comments and the
 other rules read the same text as YAML. A repository needs no copy: conftest
 pulls the policy by commit into the git directory and runs the chosen
-namespaces, with `actionlint.yaml` as data:
+namespaces, with the policy's `defaults.yaml`, the repository's own config and
+`actionlint.yaml` as data:
 
 ```sh
+policy=$(git rev-parse --git-path workflow-policy)
 conftest test --parser ignore \
   --update 'git::https://github.com/victor-software-house/actions.git//policy?ref=<commit>' \
-  -p "$(git rev-parse --git-path workflow-policy)" -p .github/workflow-policy \
+  -p "$policy" -p .github/workflow-policy \
+  --data "$policy/defaults.yaml" --data .github/workflow-policy/config.yaml \
   --data .github/actionlint.yaml \
   --namespace workflow_drafts --namespace workflow_pins \
   .github/workflows
 ```
 
-A repository's exceptions are a package `workflow_exceptions` in its own
-`.github/workflow-policy/`: each entry names the rule, the workflow file and a
-reason, and an entry with no reason excepts nothing.
+Every value a rule compares against is a parameter in `policy/defaults.yaml`,
+under `workflow_policy_defaults.<rule>.<name>`: the draft types and condition,
+the accepted concurrency group endings, the hosted and other accepted runner
+labels, the allowed top-level permission levels, the pin pattern, and the
+accepted mise profiles with the workflows exempt from them. A repository
+replaces one under `workflow_policy.<rule>.<name>` in its own config file; the
+value replaces the default whole, so a list is restated in full. A rule fails
+when the defaults are not loaded, instead of passing everything.
 
-```rego
-package workflow_exceptions
+The same file holds the repository's exceptions. Each entry names the rule,
+the workflow file and a reason, and optionally a job, and within that job a
+step by its `id` or `name`. An entry without a job covers the whole file; one
+with a job covers only what the rule reports for that job, so it never
+reaches a finding about the file as a whole, and the pins rule, which reads
+lines, takes file entries only. An entry with no reason excepts nothing. An
+excepted finding is reported as a warning that names the reason.
 
-import rego.v1
-
-exceptions contains {"rule": "permissions", "file": "release.yml", "reason": "publishes the release with the workflow token"}
+```yaml
+workflow_policy:
+  mise_env:
+    profiles: [ci, release]
+  labels:
+    allowed: [corp-runner-large]
+  exceptions:
+    - rule: permissions
+      file: release.yml
+      reason: publishes the release with the workflow token
+    - rule: mise_env
+      file: ci.yml
+      job: bench
+      step: probe
+      reason: measures the dev profile's install
 ```
+
+A repository adds rules of its own as Rego packages beside the config, in
+`.github/workflow-policy/`, and names each with another `--namespace`. They
+may import `data.workflow_lib` for the parsed workflow, `param` and the
+exceptions.
 
 ## Releases
 
@@ -440,5 +470,5 @@ Pin the commit a tag names, with the tag as a comment.
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
 | `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.28's catalog, apart from `format`, the `test` command without `--lib`, the added `doc` and `check:docs`, and the `check:versions` guard; the catalog names no toolchain version |
-| `check:policy` | `conftest verify`: every rule in `policy/` passes its tests, including a failing case per rule |
+| `check:policy` | `conftest verify` with `policy/defaults.yaml`: every rule in `policy/` passes its tests, including a failing case per rule |
 | `check:docs-probes` | The catalog's `check:docs` fails each probe crate that breaks the docs standard and passes each that keeps it; only `cargo metadata --no-deps` runs, so nothing compiles |
