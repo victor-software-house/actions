@@ -392,7 +392,7 @@ runs:
 | Package | Rule |
 |:--|:--|
 | `workflow_drafts` | A workflow on `pull_request` lists `opened`, `synchronize`, `reopened` and `ready_for_review`, and each job skips drafts with `if: ${{ !github.event.pull_request.draft }}` or needs a job that does |
-| `workflow_concurrency` | A workflow on `pull_request` groups runs by `${{ github.event.pull_request.number \|\| github.ref_name }}` and cancels the run a new push replaces |
+| `workflow_concurrency` | A workflow on `pull_request` groups runs by `${{ github.event.pull_request.number \|\| github.ref_name }}`, optionally followed by `${{ github.event.pull_request.draft && '-draft' \|\| '' }}` so a draft run never cancels the ready one, and cancels the run a new push replaces |
 | `workflow_labels` | Every `runs-on` label, and every `runner` or `*-runner` input to a reusable workflow, is a standard GitHub-hosted runner or one `.github/actionlint.yaml` lists |
 | `workflow_permissions` | The top-level `permissions` map each scope to `read` or `none`; a job that writes maps its own scopes |
 | `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
