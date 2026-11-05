@@ -1,5 +1,5 @@
 # A workflow every rule accepts, and helpers that feed it to a rule the way
-# conftest's ignore parser does: one entry per line.
+# conftest does: parsed as YAML.
 package workflow_fixtures
 
 import rego.v1
@@ -34,10 +34,13 @@ jobs:
       light-runner: nscloud-ubuntu-24.04-amd64-2x4
       build-runner: '["nscloud-ubuntu-24.04-amd64-4x8"]'`
 
-lines(text) := [{"Original": line} | some line in split(text, "\n")]
+# conftest hands a rule the workflow parsed as YAML.
+lines(text) := yaml.unmarshal(text)
 
-# The workflow with one substring replaced.
-edited(old, new) := lines(replace(workflow, old, new)) if contains(workflow, old)
+# The workflow's text with one substring replaced, and that text parsed.
+edited_text(old, new) := replace(workflow, old, new) if contains(workflow, old)
+
+edited(old, new) := lines(edited_text(old, new))
 
 file := {"name": "ci.yml", "dir": ".github/workflows"}
 

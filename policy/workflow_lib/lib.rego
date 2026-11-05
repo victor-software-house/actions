@@ -1,16 +1,17 @@
-# What every workflow rule reads. conftest passes one workflow at a time
-# through its ignore parser, so `input` is the file's lines: the pins rule
-# reads them as written, comments included, and the other rules read the same
-# text through yaml.unmarshal.
+# What every workflow rule reads. conftest parses each workflow as YAML, so
+# `input` is the workflow. The pins rule reads the file as written, comments
+# included, from data.workflow_texts, which policy/texts.sh writes: conftest's
+# ignore parser would keep the comments, but it panics on any line that ends
+# in a backslash (go-ignore 0.3.1), so it never reads a workflow.
 package workflow_lib
 
 import rego.v1
 
-text := concat("\n", [entry.Original | some entry in input])
+workflow := input
 
-lines := [{"number": i + 1, "text": entry.Original} | some i, entry in input]
+lines := [{"number": i + 1, "text": line} | some i, line in split(data.workflow_texts[data.conftest.file.name], "\n")]
 
-workflow := yaml.unmarshal(text)
+text_loaded if data.workflow_texts[data.conftest.file.name]
 
 jobs := object.get(workflow, "jobs", {})
 

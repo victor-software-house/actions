@@ -398,22 +398,30 @@ runs:
 | `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
 | `workflow_mise_env` | Every step that runs mise, through `jdx/mise-action` or a `mise` command, loads the `ci` profile: the nearest `MISE_ENV` (the step's, else the job's, else the workflow's) is `ci` or starts with `ci,`, so a runner never installs the tools of `mise.dev.toml`; a run script may not override it by assigning `MISE_ENV` inline or in `$GITHUB_ENV`, passing `mise -E`/`--env`, or unsetting it; `secrets.yml`, the credential scan, may set `dev,hooks` |
 
-`workflow_lib` holds what the rules share. conftest reads each workflow on its
-own through its ignore parser, so the pins rule sees the comments and the
-other rules read the same text as YAML. A repository needs no copy: conftest
-pulls the policy by commit into the git directory and runs the chosen
-namespaces, with the policy's `defaults.yaml`, the repository's own config and
-`actionlint.yaml` as data:
+`workflow_lib` holds what the rules share. conftest parses each workflow as
+YAML, which drops its comments, so the pins rule reads each file's text from
+data: `policy/texts.sh` writes the named workflows' text as YAML under
+`workflow_texts`, and the pins rule fails when it is not loaded. conftest's
+own ignore parser cannot serve here: it stops with a panic on any line that
+ends in a backslash, such as a continued shell command.
+
+A repository needs no copy: conftest pulls the policy by commit into the git
+directory and runs the chosen namespaces. `--absolute-paths` keeps the path
+whole, since a linked worktree's git directory is absolute and conftest would
+otherwise read it as relative. The run takes the policy's `defaults.yaml`,
+the workflows' text, the repository's own config and `actionlint.yaml` as
+data:
 
 ```sh
 policy=$(git rev-parse --git-path workflow-policy)
-conftest test --parser ignore \
-  --update 'git::https://github.com/victor-software-house/actions.git//policy?ref=<commit>' \
-  -p "$policy" -p .github/workflow-policy \
-  --data "$policy/defaults.yaml" --data .github/workflow-policy/config.yaml \
-  --data .github/actionlint.yaml \
+texts=$(git rev-parse --git-path workflow-texts.yaml)
+conftest pull --absolute-paths -p "$policy" 'git::https://github.com/victor-software-house/actions.git//policy?ref=<commit>'
+sh "$policy/texts.sh" .github/workflows/*.yml >"$texts"
+conftest test -p "$policy" -p .github/workflow-policy \
+  --data "$policy/defaults.yaml" --data "$texts" \
+  --data .github/workflow-policy/config.yaml --data .github/actionlint.yaml \
   --namespace workflow_drafts --namespace workflow_pins \
-  .github/workflows
+  .github/workflows/*.yml
 ```
 
 Every value a rule compares against is a parameter in `policy/defaults.yaml`,
@@ -471,5 +479,5 @@ Pin the commit a tag names, with the tag as a comment.
 | `lint:workflows` | `actionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
 | `check:catalog` | `tasks/rust.toml` equals its source, ctl-core v0.6.28's catalog, apart from `format`, the `test` command without `--lib`, the added `doc` and `check:docs`, and the `check:versions` guard; the catalog names no toolchain version |
-| `check:policy` | `conftest verify` with `policy/defaults.yaml`: every rule in `policy/` passes its tests, including a failing case per rule |
+| `check:policy` | `conftest verify` with `policy/defaults.yaml`: every rule in `policy/` passes its tests, including a failing case per rule; then the pins rule runs over this repository's workflows, whose `rust-ci.yml` holds backslash continuations |
 | `check:docs-probes` | The catalog's `check:docs` fails each probe crate that breaks the docs standard and passes each that keeps it; only `cargo metadata --no-deps` runs, so nothing compiles |
