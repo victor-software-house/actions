@@ -121,3 +121,7 @@ test_caller_passing_dev_fails if {
 test_caller_passing_ci_passes if {
 	count(denied(caller("ci,release"))) == 0
 }
+
+test_caller_passing_nothing_fails if {
+	count(denied(f.edited("    with:\n      light-runner:", "    with:\n      mise-env:\n      light-runner:"))) == 1
+}

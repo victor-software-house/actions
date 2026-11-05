@@ -58,8 +58,10 @@ finding contains {"msg": msg, "job": name, "step": step} if {
 finding contains {"msg": msg, "job": name} if {
 	some name, job in lib.jobs
 	"uses" in object.keys(job)
-	value := object.get(job, ["with", "mise-env"], null)
-	value != null
+
+	# A key with no value passes an empty input, which falls back to dev too.
+	"mise-env" in object.keys(object.get(job, "with", {}))
+	value := object.get(job, ["with", "mise-env"], "")
 	not accepted(sprintf("%v", [value]))
 	msg := sprintf("job %s passes mise-env %v to a reusable workflow; pass %s", [name, value, concat(" or ", profiles)])
 }
