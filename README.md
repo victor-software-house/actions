@@ -427,10 +427,11 @@ when the defaults are not loaded, instead of passing everything.
 
 The same file holds the repository's exceptions. Each entry names the rule,
 the workflow file and a reason, and optionally a job, and within that job a
-step by its `id` or `name`. An entry without a job covers the whole file; one
+step by its `id` or `name`. An entry with neither covers the whole file; one
 with a job covers only what the rule reports for that job, so it never
 reaches a finding about the file as a whole, and the pins rule, which reads
-lines, takes file entries only. An entry with no reason excepts nothing. An
+lines, takes file entries only. A step without its job covers nothing, and an
+entry with no reason excepts nothing. An
 excepted finding is reported as a warning that names the reason.
 
 ```yaml
