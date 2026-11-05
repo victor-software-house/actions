@@ -15,7 +15,7 @@ test_group_per_commit_fails if {
 }
 
 test_no_cancel_fails if {
-	denied(f.edited("  cancel-in-progress: true", "  cancel-in-progress: false")) == {"concurrency must set cancel-in-progress: true"}
+	denied(f.edited("  cancel-in-progress: true", "  cancel-in-progress: false")) == {`concurrency must set cancel-in-progress to one of: true, ${{ github.event_name == 'pull_request' }}, ${{ github.event_name != 'push' }}`}
 }
 
 test_missing_concurrency_fails if {
@@ -36,4 +36,15 @@ test_draft_suffix_passes if {
 
 test_anything_after_the_draft_suffix_fails if {
 	denied(f.edited("|| github.ref_name }}\n", "|| github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}-${{ github.sha }}\n")) == {"concurrency.group must end in one of: ${{ github.event.pull_request.number || github.ref_name }}, ${{ github.event.pull_request.number || github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}"}
+}
+
+# Cancelling pull request runs only lets every push to main finish.
+test_pull_request_only_cancel_passes if {
+	count(denied(f.edited("  cancel-in-progress: true", "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}"))) == 0
+}
+
+test_cancel_parameter_changes_the_result if {
+	count(workflow_concurrency.deny_concurrency) == 1 with input as f.edited("  cancel-in-progress: true", "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
+		with data.conftest.file as f.file
+		with data.workflow_policy as {"concurrency": {"cancel_in_progress": [true]}}
 }
