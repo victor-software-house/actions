@@ -79,9 +79,10 @@ warn_mise_env contains msg if some msg in lib.warned("mise_env", finding)
 inline_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^A-Za-z0-9_])MISE_ENV=["']?([^\s"';&|]*)`, run, -1)]
 
 # mise reads -E and --env only before its subcommand, among its own flags
-# (each a -flag, with or without a value), so a -E after exec, run or a task
-# name belongs to another program and is not matched.
-flag_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[\s;&|(])mise(?:\s+-[^\sE=-][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?|\s+--[^\s=e][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?)*\s+(?:-E[\s=]*|--env[\s=]+)["']?([^\s"';&|]*)`, run, -1)]
+# (each a -flag, with or without a value; -E may end a group such as -qE), so
+# a -E after exec, run or a task name belongs to another program and is not
+# matched. mise itself may be named by a path, as runs_mise reads it.
+flag_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise(?:\s+-[^\sE=-][^\sE=]*(?:[\s=][^\s;&|-][^\s;&|]*)?|\s+--[^\s=e][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?)*\s+(?:-[A-Za-z]*E[\s=]*|--env[\s=]+)["']?([^\s"';&|]*)`, run, -1)]
 
 unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|$)|(^|\s)(?:-u\s*|--unset[\s=]+)MISE_ENV([\s;&|]|$)`, run)
 
