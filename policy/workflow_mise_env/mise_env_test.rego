@@ -178,7 +178,7 @@ test_env_i_with_an_assignment_among_the_program_arguments_fails if {
 }
 
 test_env_i_quoted_assignment_with_a_space_passes if {
-	every run in ["env -i FOO=\"a b\" MISE_ENV=ci mise install", "env -i FOO='a b' MISE_ENV=ci mise install", "(env -i MISE_ENV=ci mise install)"] {
+	every run in ["env -i FOO=\"a b\" MISE_ENV=ci mise install", "env -i FOO='a b' MISE_ENV=ci mise install", "env -i \"FOO=a b\" MISE_ENV=ci mise install", "env -i 'FOO=a b' MISE_ENV=ci mise install", "(env -i MISE_ENV=ci mise install)"] {
 		count(denied(ci_workflow(run))) == 0
 	}
 }

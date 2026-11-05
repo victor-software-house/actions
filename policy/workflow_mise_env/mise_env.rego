@@ -104,7 +104,7 @@ unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|
 # env -i MISE_ENV=ci mise install; inline_values checks that value. An
 # assignment among the started program's arguments does not count.
 unsets(run) if {
-	some m in regex.find_all_string_submatch_n(`(?:^|[\s;&|(])env(?:\s+-[^\s]*(?:\s+[^\s-][^\s]*)?)*\s+(?:-i|--ignore-environment|-)((?:[ \t]+["']?[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;&|)"']+)*["']?)*)(?:[\s;&|)]|$)`, run, -1)
+	some m in regex.find_all_string_submatch_n(`(?:^|[\s;&|(])env(?:\s+-[^\s]*(?:\s+[^\s-][^\s]*)?)*\s+(?:-i|--ignore-environment|-)((?:[ \t]+(?:"[A-Za-z_][A-Za-z0-9_]*=[^"]*"|'[A-Za-z_][A-Za-z0-9_]*=[^']*'|[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;&|)"']+)*))*)(?:[\s;&|)]|$)`, run, -1)
 	not regex.match(`(^|\s)["']?MISE_ENV=`, m[1])
 }
 
