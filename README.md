@@ -400,10 +400,11 @@ runs:
 
 `workflow_lib` holds what the rules share. conftest parses each workflow as
 YAML, which drops its comments, so the pins rule reads each file's text from
-data: `policy/texts.sh` writes the named workflows' text as YAML under
-`workflow_texts`, and the pins rule fails when it is not loaded. conftest's
-own ignore parser cannot serve here: it stops with a panic on any line that
-ends in a backslash, such as a continued shell command.
+data: `policy/texts.sh`, run from the repository root, writes every
+workflow's text as YAML under `workflow_texts`, and the pins rule fails when
+it is not loaded. conftest's own ignore parser cannot serve here: it stops
+with a panic on any line that ends in a backslash, such as a continued shell
+command.
 
 A repository needs no copy: conftest pulls the policy by commit into the git
 directory and runs the chosen namespaces. `--absolute-paths` keeps the path
@@ -416,9 +417,9 @@ data:
 policy=$(git rev-parse --git-path workflow-policy)
 texts=$(git rev-parse --git-path workflow-texts.yaml)
 conftest pull --absolute-paths -p "$policy" 'git::https://github.com/victor-software-house/actions.git//policy?ref=<commit>'
-workflows() { git ls-files -z ':(glob).github/workflows/*.yml' ':(glob).github/workflows/*.yaml'; }
-workflows | xargs -0 sh "$policy/texts.sh" >"$texts"
-workflows | xargs -0 conftest test -p "$policy" -p .github/workflow-policy \
+sh "$policy/texts.sh" >"$texts"
+git ls-files -z ':(glob).github/workflows/*.yml' ':(glob).github/workflows/*.yaml' |
+  xargs -0 -r conftest test -p "$policy" -p .github/workflow-policy \
   --data "$policy/defaults.yaml" --data "$texts" \
   --data .github/workflow-policy/config.yaml --data .github/actionlint.yaml \
   --namespace workflow_drafts --namespace workflow_pins
