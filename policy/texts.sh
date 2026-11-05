@@ -9,5 +9,7 @@ printf 'workflow_texts:\n'
 for file in "$@"; do
   name=$(basename "$file" | sed 's/[\\"]/\\&/g')
   printf '  "%s": |2-\n' "$name"
-  sed 's/^/    /' "$file"
+  # awk ends every line with a newline, the last one too, so a file without
+  # a final newline cannot pull the next file's header into its block.
+  awk '{ print "    " $0 }' "$file"
 done

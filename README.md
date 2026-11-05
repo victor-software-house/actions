@@ -416,12 +416,12 @@ data:
 policy=$(git rev-parse --git-path workflow-policy)
 texts=$(git rev-parse --git-path workflow-texts.yaml)
 conftest pull --absolute-paths -p "$policy" 'git::https://github.com/victor-software-house/actions.git//policy?ref=<commit>'
-sh "$policy/texts.sh" .github/workflows/*.yml >"$texts"
-conftest test -p "$policy" -p .github/workflow-policy \
+workflows() { git ls-files -z ':(glob).github/workflows/*.yml' ':(glob).github/workflows/*.yaml'; }
+workflows | xargs -0 sh "$policy/texts.sh" >"$texts"
+workflows | xargs -0 conftest test -p "$policy" -p .github/workflow-policy \
   --data "$policy/defaults.yaml" --data "$texts" \
   --data .github/workflow-policy/config.yaml --data .github/actionlint.yaml \
-  --namespace workflow_drafts --namespace workflow_pins \
-  .github/workflows/*.yml
+  --namespace workflow_drafts --namespace workflow_pins
 ```
 
 Every value a rule compares against is a parameter in `policy/defaults.yaml`,
