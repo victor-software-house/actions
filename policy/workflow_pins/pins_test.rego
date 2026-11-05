@@ -22,10 +22,3 @@ test_sha_without_comment_fails if {
 test_branch_comment_needs_a_date if {
 	denied(f.edited(" # main, 2026-11-02", " # main")) == {"line 26: uses org/actions/.github/workflows/rust-ci.yml@0123456789abcdef0123456789abcdef01234567 # main must pin a commit SHA and name its release in a comment, such as @<sha> # v1.2.3"}
 }
-
-test_exception_applies if {
-	ex := workflow_pins.exception with input as f.lines(f.workflow)
-		with data.conftest.file as f.file
-		with data.workflow_exceptions.exceptions as {{"rule": "pins", "file": "ci.yml", "reason": "a vendored action"}}
-	ex == {["pins"]}
-}

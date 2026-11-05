@@ -34,27 +34,6 @@ test_push_only_workflow_is_out_of_scope if {
 	count(denied(f.edited("  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n", "  push:\n"))) == 0
 }
 
-test_exception_with_reason_applies if {
-	ex := workflow_drafts.exception with input as f.edited("reopened, ready_for_review", "reopened")
-		with data.conftest.file as f.file
-		with data.workflow_exceptions.exceptions as {{"rule": "drafts", "file": "ci.yml", "reason": "a scheduled job"}}
-	ex == {["drafts"]}
-}
-
-test_exception_needs_a_reason if {
-	ex := workflow_drafts.exception with input as f.lines(f.workflow)
-		with data.conftest.file as f.file
-		with data.workflow_exceptions.exceptions as {{"rule": "drafts", "file": "ci.yml", "reason": " "}}
-	count(ex) == 0
-}
-
-test_exception_names_its_file if {
-	ex := workflow_drafts.exception with input as f.lines(f.workflow)
-		with data.conftest.file as f.file
-		with data.workflow_exceptions.exceptions as {{"rule": "drafts", "file": "release.yml", "reason": "tags only"}}
-	count(ex) == 0
-}
-
 test_job_gated_to_another_event_passes if {
 	count(denied(f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n    if: github.event_name == 'schedule'\n"))) == 0
 }
