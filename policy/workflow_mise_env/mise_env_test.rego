@@ -145,7 +145,7 @@ test_inline_ci_profile_passes if count(denied(ci_workflow("MISE_ENV=ci,release m
 test_longer_variable_name_passes if count(denied(ci_workflow("MY_MISE_ENV=dev mise install"))) == 0
 
 test_env_flag_fails if {
-	every run in ["mise --env dev install", "mise -E dev install", "mise -C sub -E dev install", "mise -q --env=dev run x", "mise -qE dev install", "mise -yE dev install", "~/.local/bin/mise -E dev install", "$HOME/.local/share/mise/bin/mise --env dev install", `bash -c "mise -E dev install"`] {
+	every run in ["mise --env dev install", "mise -E dev install", "mise -C sub -E dev install", "mise -q --env=dev run x", "mise -qE dev install", "mise -C/srv/Env -E dev install", "mise -Cbuild/E2E --env dev install", "mise -yE dev install", "~/.local/bin/mise -E dev install", "$HOME/.local/share/mise/bin/mise --env dev install", `bash -c "mise -E dev install"`] {
 		denied(ci_workflow(run)) == {"job build, step 3 runs mise --env dev"}
 	}
 }

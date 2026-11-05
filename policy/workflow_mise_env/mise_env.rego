@@ -82,7 +82,7 @@ inline_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^A
 # (each a -flag, with or without a value; -E may end a group such as -qE), so
 # a -E after exec, run or a task name belongs to another program and is not
 # matched. mise itself may be named by a path, as runs_mise reads it.
-flag_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise(?:\s+-[^\sE=-][^\sE=]*(?:[\s=][^\s;&|-][^\s;&|]*)?|\s+--[^\s=e][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?)*\s+(?:-[A-Za-z]*E[\s=]*|--env[\s=]+)["']?([^\s"';&|]*)`, run, -1)]
+flag_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise(?:\s+-[^\sE=-](?:[^\s=]*[^\sE=])?(?:[\s=][^\s;&|-][^\s;&|]*)?|\s+--[^\s=e][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?)*\s+(?:-[A-Za-z]*E[\s=]*|--env[\s=]+)["']?([^\s"';&|]*)`, run, -1)]
 
 unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|$)|(^|\s)(?:-u\s*|--unset[\s=]+)MISE_ENV([\s;&|]|$)`, run)
 
