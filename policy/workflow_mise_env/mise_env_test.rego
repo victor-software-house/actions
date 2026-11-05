@@ -171,6 +171,20 @@ test_env_i_that_assigns_another_profile_fails if {
 	denied(ci_workflow("env -i MISE_ENV=dev mise install")) == {"job build, step 3 sets MISE_ENV=dev in its run script"}
 }
 
+test_env_i_with_an_assignment_among_the_program_arguments_fails if {
+	every run in ["env -i mise run deploy MISE_ENV=ci", "env -i mise exec -- echo MISE_ENV=ci", "env -i mise install\r\necho"] {
+		denied(ci_workflow(run)) == {"job build, step 3 unsets MISE_ENV in its run script"}
+	}
+}
+
+test_env_i_quoted_assignment_with_a_space_passes if {
+	every run in ["env -i FOO=\"a b\" MISE_ENV=ci mise install", "env -i FOO='a b' MISE_ENV=ci mise install", "env -i \"FOO=a b\" MISE_ENV=ci mise install", "env -i 'FOO=a b' MISE_ENV=ci mise install", "(env -i MISE_ENV=ci mise install)"] {
+		count(denied(ci_workflow(run))) == 0
+	}
+}
+
+test_env_i_assignment_before_an_operator_passes if count(denied(ci_workflow("env -i MISE_ENV=ci; mise install"))) == 0
+
 test_env_i_with_an_assignment_on_a_later_line_fails if {
 	denied(ci_workflow("env -i mise install\necho MISE_ENV=ci")) == {"job build, step 3 unsets MISE_ENV in its run script"}
 }
