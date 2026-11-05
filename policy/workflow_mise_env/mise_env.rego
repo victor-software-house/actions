@@ -99,8 +99,13 @@ flag_values(run) := [m[1] |
 unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|$)|(^|\s)(?:-u\s*|--unset[\s=]+)MISE_ENV([\s;&|]|$)`, run)
 
 # env -i, env - and env --ignore-environment start a program with an empty
-# environment, so MISE_ENV is gone too.
-unsets(run) if regex.match(`(^|[\s;&|(])env(?:\s+-[^\s]*(?:\s+[^\s-][^\s]*)?)*\s+(?:-i|--ignore-environment|-)(\s|$)`, run)
+# environment, so MISE_ENV is gone too, unless the same env command assigns
+# it again, as in env -i MISE_ENV=ci mise install; inline_values checks that
+# value.
+unsets(run) if {
+	some m in regex.find_all_string_submatch_n(`(?:^|[\s;&|(])env(?:\s+-[^\s]*(?:\s+[^\s-][^\s]*)?)*\s+(?:-i|--ignore-environment|-)((?:[ \t]+[^\s;&|]+)*)[ \t]*(?:[;&|)\n]|$)`, run, -1)
+	not regex.match(`(^|\s)["']?MISE_ENV=`, m[1])
+}
 
 finding contains {"msg": msg, "job": name, "step": step} if {
 	some name, job in lib.jobs
