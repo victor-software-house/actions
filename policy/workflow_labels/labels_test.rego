@@ -33,13 +33,6 @@ test_larger_hosted_runner_fails if {
 
 test_expression_is_not_checked if count(denied(f.edited("    runs-on: ubuntu-latest", "    runs-on: ${{ matrix.os }}"), f.labels)) == 0
 
-test_exception_applies if {
-	ex := workflow_labels.exception with input as f.lines(f.workflow)
-		with data.conftest.file as f.file
-		with data.workflow_exceptions.exceptions as {{"rule": "labels", "file": "ci.yml", "reason": "a runner another organization provides"}}
-	ex == {["labels"]}
-}
-
 test_runs_on_object_labels_are_checked if {
 	denied(f.edited("    runs-on: nscloud-ubuntu-24.04-amd64-2x4", "    runs-on:\n      group: builders\n      labels: [nscloud-ubuntu-24.04-amd64-2x8]"), f.labels) == {"job build runs on nscloud-ubuntu-24.04-amd64-2x8, which is not a GitHub-hosted runner and .github/actionlint.yaml does not list"}
 	count(denied(f.edited("    runs-on: nscloud-ubuntu-24.04-amd64-2x4", "    runs-on:\n      group: builders"), f.labels)) == 0

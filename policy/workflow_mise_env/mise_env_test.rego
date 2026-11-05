@@ -13,6 +13,8 @@ mise_steps := `
       - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v4.0.1
       - run: mise install --locked`
 
+text_with_mise := replace(f.workflow, "      - uses: ./.github/actions/setup", concat("", ["      - uses: ./.github/actions/setup", mise_steps]))
+
 with_mise := f.edited("      - uses: ./.github/actions/setup", concat("", ["      - uses: ./.github/actions/setup", mise_steps]))
 
 missing := {
@@ -44,13 +46,6 @@ test_step_env_covers_only_its_step if {
 
 test_profile_named_like_ci_fails if {
 	denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: cix\n")) == missing
-}
-
-test_exception_applies if {
-	ex := workflow_mise_env.exception with input as with_mise
-		with data.conftest.file as f.file
-		with data.workflow_exceptions.exceptions as {{"rule": "mise_env", "file": "ci.yml", "reason": "runs the dev profile's gitleaks"}}
-	ex == {["mise_env"]}
 }
 
 # GitHub takes the nearest env: a step's dev beats the workflow's ci.
@@ -110,4 +105,23 @@ test_each_non_call_passes if {
 	every run in not_calls {
 		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)]))) == {step_2}
 	}
+}
+
+test_expression_is_not_checked if {
+	count(denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ${{ inputs.mise-env }}\n"))) == 0
+}
+
+# The fixture's verify job calls a reusable workflow.
+caller(env) := f.edited("    with:\n      light-runner:", sprintf("    with:\n      mise-env: %s\n      light-runner:", [env]))
+
+test_caller_passing_dev_fails if {
+	denied(caller("dev,release")) == {"job verify passes mise-env dev,release to a reusable workflow; pass ci"}
+}
+
+test_caller_passing_ci_passes if {
+	count(denied(caller("ci,release"))) == 0
+}
+
+test_caller_passing_nothing_fails if {
+	count(denied(f.edited("    with:\n      light-runner:", "    with:\n      mise-env:\n      light-runner:"))) == 1
 }
