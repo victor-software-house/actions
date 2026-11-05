@@ -22,7 +22,9 @@ missing := {
 	"job build, step 3 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env",
 }
 
-lines_with(old, new) := f.lines(replace(concat("\n", [l.Original | some l in with_mise]), old, new))
+text_with(old, new) := replace(text_with_mise, old, new)
+
+lines_with(old, new) := f.lines(text_with(old, new))
 
 test_valid_workflow_passes if count(denied(f.lines(f.workflow))) == 0
 
@@ -50,7 +52,7 @@ test_profile_named_like_ci_fails if {
 
 # GitHub takes the nearest env: a step's dev beats the workflow's ci.
 test_step_profile_overrides_the_workflow if {
-	workflow_ci := concat("\n", [l.Original | some l in lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ci\n")])
+	workflow_ci := text_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ci\n")
 	denied(f.lines(replace(workflow_ci, "      - run: mise install --locked", "      - run: mise install --locked\n        env:\n          MISE_ENV: dev"))) == {"job build, step 3 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"}
 }
 
@@ -127,9 +129,7 @@ test_caller_passing_nothing_fails if {
 
 # The fixture with the workflow's env set to ci and the mise install step
 # replaced by run, so only the run script's own overrides can fail.
-ci_run(run) := lines_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)]))
-
-ci_workflow(run) := f.lines(replace(concat("\n", [l.Original | some l in ci_run(run)]), "permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ci\n"))
+ci_workflow(run) := f.lines(replace(text_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)])), "permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ci\n"))
 
 test_inline_profile_fails if {
 	denied(ci_workflow("MISE_ENV=dev mise install")) == {"job build, step 3 sets MISE_ENV=dev in its run script"}

@@ -1,7 +1,7 @@
 # Every `uses:` pins a commit and names its release in a comment, so a moved
 # tag or branch never changes what runs. YAML parsing drops comments, so this
-# rule reads the lines as written, and reports no job: an exception for it
-# covers the whole file.
+# rule reads the file's lines as written (data.workflow_texts), and reports no
+# job: an exception for it covers the whole file.
 package workflow_pins
 
 import data.workflow_lib as lib
@@ -22,5 +22,7 @@ finding contains {"msg": msg} if {
 deny_pins contains msg if some msg in lib.denied("pins", finding)
 
 deny_pins contains lib.unloaded_message if lib.unloaded("pins")
+
+deny_pins contains "the workflow's text is not loaded; pass policy/texts.sh's output with --data" if not lib.text_loaded
 
 warn_pins contains msg if some msg in lib.warned("pins", finding)
