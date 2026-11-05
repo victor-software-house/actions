@@ -9,16 +9,13 @@ import rego.v1
 
 runs_mise(step) if startswith(object.get(step, "uses", ""), "jdx/mise-action@")
 
-# mise run as a command, by name or by any path (./mise, ~/.local/bin/mise),
-# where a shell command starts: the start of a line, after a separator, an
-# opening parenthesis or $(, inside bash -c "…", or after a wrapper's --,
-# past any VAR=value assignments and the wrappers env, time, sudo, nice, nohup,
-# exec, command, xargs and timeout <limit>. mise as an argument, as in
-# ls ~/.local/bin/mise or rm -rf ~/.cache/mise, is not a call, and neither are
-# mise.lock and mise-tasks/.
-runs_mise(step) if regex.match(command, object.get(step, "run", ""))
-
-command := `(^|\n|[;&|(]|\$\(|-c\s+["']|\s--\s)\s*(\w+=\S*\s+)*((env|time|sudo|nice|nohup|exec|command|xargs|timeout\s+\S+)\s+)*(\S*/)?mise(\s|["')]|$)`
+# Any step whose script names the word mise runs it, wherever it stands: after
+# a shell keyword, a wrapper and its flags, a quote, a backtick or a path. A
+# shell script cannot be parsed reliably here, so the rule errs toward finding:
+# a step that only names a mise folder, such as rm -rf ~/.cache/mise, is found
+# too, and MISE_ENV: ci costs it nothing. mise.lock, mise.toml, mise-tasks/,
+# .mise/, mise_env and MISE_ENV are other words.
+runs_mise(step) if regex.match(`(^|[^\w.-])mise($|[^\w.-])`, object.get(step, "run", ""))
 
 # ci alone, or ci first among several profiles, such as ci,release.
 ci_profile(value) if value == "ci"

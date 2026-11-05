@@ -66,6 +66,7 @@ step_2 := "job build, step 2 runs mise without MISE_ENV=ci in its own, its job's
 calls := [
 	"fsbench probe -label x -- mise install --locked",
 	`bash -c "mise install"`,
+	`bash -lc "mise install"`,
 	"~/.local/bin/mise install",
 	"./mise install",
 	"/usr/local/mise install",
@@ -74,15 +75,23 @@ calls := [
 	"cd tools && mise",
 	"MISE_YES=1 mise install",
 	"timeout 300 mise run test",
+	"sudo -E mise install",
+	"nice -n 10 mise run test",
+	"env -i mise install",
+	"if mise doctor; then echo ok; fi",
+	"! mise doctor",
 	"echo start; mise verify",
 	"echo $(mise which go)",
+	"echo `mise which go`",
+	# Found on purpose: the rule errs toward finding.
+	"rm -rf ~/.cache/mise",
 ]
 
 not_calls := [
-	"rm -rf ~/.cache/mise",
-	"ls ~/.local/bin/mise",
-	"cat mise.lock mise-tasks/check.sh",
+	"cat mise.lock mise.toml mise-tasks/check.sh",
 	"fsbench fetch -lock mise.lock",
+	"ls .mise/",
+	"echo \"$MISE_ENV\" mise_env",
 ]
 
 test_each_call_fails if {
