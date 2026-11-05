@@ -10,9 +10,13 @@ import rego.v1
 runs_mise(step) if startswith(object.get(step, "uses", ""), "jdx/mise-action@")
 
 # mise as a command word: at the start, or after a space, a separator, an
-# opening parenthesis, a quote or a path, and before a space, a closing quote
-# or the end. mise.lock and mise-tasks/ are not commands.
-runs_mise(step) if regex.match(`(^|[\s;&|("'/])mise(\s|["']|$)`, object.get(step, "run", ""))
+# opening parenthesis or a quote, and before a space, a closing quote or the
+# end. mise.lock, mise-tasks/ and a folder such as ~/.cache/mise are not
+# commands.
+runs_mise(step) if regex.match(`(^|[\s;&|("'])mise(\s|["']|$)`, object.get(step, "run", ""))
+
+# A binary called by its path, such as ~/.local/bin/mise install.
+runs_mise(step) if regex.match(`/bin/mise(\s|["']|$)`, object.get(step, "run", ""))
 
 # ci alone, or ci first among several profiles, such as ci,release.
 ci_profile(value) if value == "ci"

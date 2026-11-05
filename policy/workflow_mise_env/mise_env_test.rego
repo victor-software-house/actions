@@ -72,3 +72,9 @@ test_mise_behind_a_quote_a_path_or_at_the_end_fails if {
 		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [run]))) == missing
 	}
 }
+
+test_mise_folder_is_not_mise if {
+	every run in ["rm -rf ~/.cache/mise", "ls ~/.local/share/mise"] {
+		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [run]))) == {"job build, step 2 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"}
+	}
+}
