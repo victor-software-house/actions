@@ -19,6 +19,12 @@ workflow_policy_defaults:
     endings:
       - "${{ github.event.pull_request.number || github.ref_name }}"
       - "${{ github.event.pull_request.number || github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}"
+    # The cancel-in-progress values accepted: always, or for pull request runs
+    # only, so every push to a branch such as main finishes its run.
+    cancel_in_progress:
+      - true
+      - "${{ github.event_name == 'pull_request' }}"
+      - "${{ github.event_name != 'push' }}"
   labels:
     # GitHub's standard hosted runners. Larger runners bill even on public
     # repositories, so they are not listed.

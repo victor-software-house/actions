@@ -74,23 +74,38 @@ warn_mise_env contains msg if some msg in lib.warned("mise_env", finding)
 
 # A run script overrides every env: map above it when it assigns MISE_ENV
 # inline or writes it to $GITHUB_ENV, passes mise -E or --env, or unsets
-# MISE_ENV, which falls back to .miserc.toml's dev. OPA's RE2 has no
-# lookahead, so each value is matched and then checked.
+# MISE_ENV or clears the environment, which falls back to .miserc.toml's dev.
+# Backslash line continuations are joined first, so a command split over
+# lines reads as one. OPA's RE2 has no lookahead, so each value is matched
+# and then checked.
+script(step) := regex.replace(object.get(step, "run", ""), `\\\n`, " ")
+
 inline_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^A-Za-z0-9_])MISE_ENV=["']?([^\s"';&|]*)`, run, -1)]
 
-# mise reads -E and --env only before its subcommand, among its own flags
-# (each a -flag, with or without a value; -E may also end a group such as
-# -qE), so
-# a -E after exec, run or a task name belongs to another program and is not
-# matched. mise itself may be named by a path, as runs_mise reads it.
-flag_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise(?:\s+-[^\s=-][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?|\s+--[^\s=e][^\s=]*(?:[\s=][^\s;&|-][^\s;&|]*)?)*\s+(?:-[A-Za-z]*E[\s=]*|--env[\s=]+)["']?([^\s"';&|]*)`, run, -1)]
+# A mise command's words, mise named by any path as runs_mise reads it, up to
+# the end of the command or a bare --, after which the words belong to the
+# program mise starts, as in mise exec -- grep -E foo.
+mise_words(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise((?:[ \t]+(?:--[^\s;&|]+|-(?:[^\s;&|-][^\s;&|]*)?|[^\s;&|-][^\s;&|]*))*)`, run, -1)]
+
+# Every -E or --env among them, also at the end of a short-flag group such as
+# -qE, and also one a task's own arguments carry, as in
+# mise run deploy --env prod: the rule errs toward finding, and a step
+# exception covers such a step.
+flag_values(run) := [m[1] |
+	some words in mise_words(run)
+	some m in regex.find_all_string_submatch_n(`(?:^|\s)(?:-[A-Za-z]*E(?:=|\s+)?|--env(?:=|\s+))["']?([^\s"';&|]*)`, words, -1)
+]
 
 unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|$)|(^|\s)(?:-u\s*|--unset[\s=]+)MISE_ENV([\s;&|]|$)`, run)
+
+# env -i, env - and env --ignore-environment start a program with an empty
+# environment, so MISE_ENV is gone too.
+unsets(run) if regex.match(`(^|[\s;&|(])env(?:\s+-[^\s]*)*\s+(?:-i|--ignore-environment|-)(\s|$)`, run)
 
 finding contains {"msg": msg, "job": name, "step": step} if {
 	some name, job in lib.jobs
 	some i, step in object.get(job, "steps", [])
-	some value in inline_values(object.get(step, "run", ""))
+	some value in inline_values(script(step))
 	not accepted(value)
 	msg := sprintf("job %s, step %d sets MISE_ENV=%s in its run script", [name, i + 1, value])
 }
@@ -98,7 +113,7 @@ finding contains {"msg": msg, "job": name, "step": step} if {
 finding contains {"msg": msg, "job": name, "step": step} if {
 	some name, job in lib.jobs
 	some i, step in object.get(job, "steps", [])
-	some value in flag_values(object.get(step, "run", ""))
+	some value in flag_values(script(step))
 	not accepted(value)
 	msg := sprintf("job %s, step %d runs mise --env %s", [name, i + 1, value])
 }
@@ -106,6 +121,6 @@ finding contains {"msg": msg, "job": name, "step": step} if {
 finding contains {"msg": msg, "job": name, "step": step} if {
 	some name, job in lib.jobs
 	some i, step in object.get(job, "steps", [])
-	unsets(object.get(step, "run", ""))
+	unsets(script(step))
 	msg := sprintf("job %s, step %d unsets MISE_ENV in its run script", [name, i + 1])
 }

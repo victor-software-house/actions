@@ -72,7 +72,6 @@ calls := [
 	"timeout 300 mise run test",
 	"sudo -E mise install",
 	"nice -n 10 mise run test",
-	"env -i mise install",
 	"if mise doctor; then echo ok; fi",
 	"! mise doctor",
 	"echo start; mise verify",
@@ -145,19 +144,19 @@ test_inline_ci_profile_passes if count(denied(ci_workflow("MISE_ENV=ci,release m
 test_longer_variable_name_passes if count(denied(ci_workflow("MY_MISE_ENV=dev mise install"))) == 0
 
 test_env_flag_fails if {
-	every run in ["mise --env dev install", "mise -E dev install", "mise -C sub -E dev install", "mise -q --env=dev run x", "mise -qE dev install", "mise -C/srv/Env -E dev install", "mise -Cbuild/E2E --env dev install", "mise -yE dev install", "~/.local/bin/mise -E dev install", "$HOME/.local/share/mise/bin/mise --env dev install", `bash -c "mise -E dev install"`] {
+	every run in ["mise --env dev install", "mise -E dev install", "mise -C sub -E dev install", "mise -q --env=dev run x", "mise -qE dev install", "mise --experimental --env dev run x", "mise -E dev install -E ci", "mise --env ci install --env dev", "mise run deploy --env dev", "mise install \\\n  --env dev", "mise -C/srv/Env -E dev install", "mise -Cbuild/E2E --env dev install", "mise -yE dev install", "~/.local/bin/mise -E dev install", "$HOME/.local/share/mise/bin/mise --env dev install", `bash -c "mise -E dev install"`] {
 		denied(ci_workflow(run)) == {"job build, step 3 runs mise --env dev"}
 	}
 }
 
 test_env_flag_of_another_program_passes if {
-	every run in ["mise exec -- grep -E foo x", "mise run deploy --env prod", "mise --env ci install"] {
+	every run in ["mise exec -- grep -E foo x", "mise -E ci exec -- foo -E dev", "mise --env ci install"] {
 		count(denied(ci_workflow(run))) == 0
 	}
 }
 
 test_unset_fails if {
-	every run in ["unset MISE_ENV", "env -u MISE_ENV mise install", "env --unset=MISE_ENV mise install"] {
+	every run in ["unset MISE_ENV", "env -u MISE_ENV mise install", "env --unset=MISE_ENV mise install", "env -i mise install", "env - PATH=$PATH mise install", "env --ignore-environment mise install"] {
 		denied(ci_workflow(run)) == {"job build, step 3 unsets MISE_ENV in its run script"}
 	}
 }

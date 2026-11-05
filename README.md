@@ -392,7 +392,7 @@ runs:
 | Package | Rule |
 |:--|:--|
 | `workflow_drafts` | A workflow on `pull_request` lists `opened`, `synchronize`, `reopened` and `ready_for_review`, and each job skips drafts with `if: ${{ !github.event.pull_request.draft }}` or needs a job that does |
-| `workflow_concurrency` | A workflow on `pull_request` groups runs by `${{ github.event.pull_request.number \|\| github.ref_name }}`, optionally followed by `${{ github.event.pull_request.draft && '-draft' \|\| '' }}` so a draft run never cancels the ready one, and cancels the run a new push replaces |
+| `workflow_concurrency` | A workflow on `pull_request` groups runs by `${{ github.event.pull_request.number \|\| github.ref_name }}`, optionally followed by `${{ github.event.pull_request.draft && '-draft' \|\| '' }}` so a draft run never cancels the ready one, and cancels the run a new push replaces, always or for pull request runs only |
 | `workflow_labels` | Every `runs-on` label, and every `runner` or `*-runner` input to a reusable workflow, is a standard GitHub-hosted runner or one `.github/actionlint.yaml` lists |
 | `workflow_permissions` | The top-level `permissions` map each scope to `read` or `none`; a job that writes maps its own scopes |
 | `workflow_pins` | Every `uses:` names a full commit SHA and a version comment (`# v1.2.3`, or `# main, <date>`) |
@@ -418,7 +418,7 @@ conftest test --parser ignore \
 
 Every value a rule compares against is a parameter in `policy/defaults.yaml`,
 under `workflow_policy_defaults.<rule>.<name>`: the draft types and condition,
-the accepted concurrency group endings, the hosted and other accepted runner
+the accepted concurrency group endings and cancel-in-progress values, the hosted and other accepted runner
 labels, the allowed top-level permission levels, the pin pattern, and the
 accepted mise profiles with the workflows exempt from them. A repository
 replaces one under `workflow_policy.<rule>.<name>` in its own config file; the
