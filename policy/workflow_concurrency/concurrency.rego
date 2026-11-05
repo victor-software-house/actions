@@ -26,9 +26,12 @@ ends_in_key if {
 	endswith(group, ending)
 }
 
-finding contains {"msg": "concurrency must set cancel-in-progress: true"} if {
+cancel_values := lib.param("concurrency", "cancel_in_progress")
+
+finding contains {"msg": msg} if {
 	lib.on_pull_request
-	object.get(lib.workflow, ["concurrency", "cancel-in-progress"], false) != true
+	not object.get(lib.workflow, ["concurrency", "cancel-in-progress"], false) in cancel_values
+	msg := sprintf("concurrency must set cancel-in-progress to one of: %s", [concat(", ", [sprintf("%v", [v]) | some v in cancel_values])])
 }
 
 deny_concurrency contains msg if some msg in lib.denied("concurrency", finding)
