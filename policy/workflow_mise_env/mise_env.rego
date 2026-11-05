@@ -85,7 +85,7 @@ inline_values(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^A
 # A mise command's words, mise named by any path as runs_mise reads it, up to
 # the end of the command or a bare --, after which the words belong to the
 # program mise starts, as in mise exec -- grep -E foo.
-mise_words(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise((?:[ \t]+(?:--[^\s;&|]+|-(?:[^\s;&|-][^\s;&|]*)?|[^\s;&|-][^\s;&|]*))*)`, run, -1)]
+mise_words(run) := [m[2] | some m in regex.find_all_string_submatch_n(`(^|[^\w.-])mise["']?((?:[ \t]+(?:--[^\s;&|]+|-(?:[^\s;&|-][^\s;&|]*)?|[^\s;&|-][^\s;&|]*))*)`, run, -1)]
 
 # Every -E or --env among them, also at the end of a short-flag group such as
 # -qE, and also one a task's own arguments carry, as in
@@ -100,7 +100,7 @@ unsets(run) if regex.match(`(^|[\s;&|(])unset\s(?:[^;&|\n]*\s)?MISE_ENV([\s;&|]|
 
 # env -i, env - and env --ignore-environment start a program with an empty
 # environment, so MISE_ENV is gone too.
-unsets(run) if regex.match(`(^|[\s;&|(])env(?:\s+-[^\s]*)*\s+(?:-i|--ignore-environment|-)(\s|$)`, run)
+unsets(run) if regex.match(`(^|[\s;&|(])env(?:\s+-[^\s]*(?:\s+[^\s-][^\s]*)?)*\s+(?:-i|--ignore-environment|-)(\s|$)`, run)
 
 finding contains {"msg": msg, "job": name, "step": step} if {
 	some name, job in lib.jobs
