@@ -161,4 +161,18 @@ test_unset_fails if {
 	}
 }
 
+test_env_i_that_assigns_an_accepted_profile_passes if {
+	every run in ["env -i MISE_ENV=ci mise install", "env -i PATH=$PATH \"MISE_ENV=ci,build\" mise install", "env -u FOO - MISE_ENV=ci mise install"] {
+		count(denied(ci_workflow(run))) == 0
+	}
+}
+
+test_env_i_that_assigns_another_profile_fails if {
+	denied(ci_workflow("env -i MISE_ENV=dev mise install")) == {"job build, step 3 sets MISE_ENV=dev in its run script"}
+}
+
+test_env_i_with_an_assignment_on_a_later_line_fails if {
+	denied(ci_workflow("env -i mise install\necho MISE_ENV=ci")) == {"job build, step 3 unsets MISE_ENV in its run script"}
+}
+
 test_unset_other_variable_passes if count(denied(ci_workflow("unset OTHER; mise install"))) == 0
