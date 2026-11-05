@@ -53,6 +53,17 @@ finding contains {"msg": msg, "job": name, "step": step} if {
 	msg := sprintf("job %s, step %d runs mise without MISE_ENV=%s in its own, its job's or the workflow's env", [name, i + 1, concat(" or ", profiles)])
 }
 
+# A job that calls a reusable workflow and passes it a mise-env input, as
+# verctl's release workflow takes, hands that workflow its MISE_ENV.
+finding contains {"msg": msg, "job": name} if {
+	some name, job in lib.jobs
+	"uses" in object.keys(job)
+	value := object.get(job, ["with", "mise-env"], null)
+	value != null
+	not accepted(sprintf("%v", [value]))
+	msg := sprintf("job %s passes mise-env %v to a reusable workflow; pass %s", [name, value, concat(" or ", profiles)])
+}
+
 deny_mise_env contains msg if some msg in lib.denied("mise_env", finding)
 
 deny_mise_env contains lib.unloaded_message if lib.unloaded("mise_env")

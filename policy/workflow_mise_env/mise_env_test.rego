@@ -110,3 +110,14 @@ test_each_non_call_passes if {
 test_expression_is_not_checked if {
 	count(denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: ${{ inputs.mise-env }}\n"))) == 0
 }
+
+# The fixture's verify job calls a reusable workflow.
+caller(env) := f.edited("    with:\n      light-runner:", sprintf("    with:\n      mise-env: %s\n      light-runner:", [env]))
+
+test_caller_passing_dev_fails if {
+	denied(caller("dev,release")) == {"job verify passes mise-env dev,release to a reusable workflow; pass ci"}
+}
+
+test_caller_passing_ci_passes if {
+	count(denied(caller("ci,release"))) == 0
+}
