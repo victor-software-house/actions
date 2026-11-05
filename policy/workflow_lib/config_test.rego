@@ -129,3 +129,11 @@ test_missing_defaults_fail if {
 		with data.conftest.file as f.file
 		with data.workflow_policy_defaults as {}
 }
+
+# A step names a step only within its job, so a step without a job covers
+# nothing.
+test_step_exception_without_job_covers_nothing if {
+	r := mise(named_steps, {"exceptions": [{"rule": "mise_env", "file": "ci.yml", "step": "mise", "reason": "no job"}]})
+	count(r.deny) == 2
+	count(r.warn) == 0
+}

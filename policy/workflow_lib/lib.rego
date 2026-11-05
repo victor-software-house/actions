@@ -46,9 +46,9 @@ unloaded_message := "the workflow policy's defaults are not loaded; pass its def
 
 # A repository's exceptions: entries in workflow_policy.exceptions, each with a
 # rule, a workflow file name and a reason, and optionally a job, and within
-# that job a step by its id or name. An entry without a job covers the whole
-# file; one with a job covers only what the rule reports for that job. An
-# entry without a reason excepts nothing.
+# that job a step by its id or name. An entry with neither covers the whole
+# file; one with a job covers only what the rule reports for that job; a step
+# without its job covers nothing. An entry without a reason excepts nothing.
 exceptions := object.get(config, "exceptions", [])
 
 step_names(finding) := {name |
@@ -57,7 +57,10 @@ step_names(finding) := {name |
 	name != null
 }
 
-covers(entry, finding) if not "job" in object.keys(entry)
+covers(entry, finding) if {
+	not "job" in object.keys(entry)
+	not "step" in object.keys(entry)
+}
 
 covers(entry, finding) if {
 	entry.job == finding.job
