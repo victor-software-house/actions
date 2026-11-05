@@ -9,14 +9,16 @@ import rego.v1
 
 runs_mise(step) if startswith(object.get(step, "uses", ""), "jdx/mise-action@")
 
-# mise as a command word: at the start, or after a space, a separator, an
-# opening parenthesis or a quote, and before a space, a closing quote or the
-# end. mise.lock, mise-tasks/ and a folder such as ~/.cache/mise are not
-# commands.
-runs_mise(step) if regex.match(`(^|[\s;&|("'])mise(\s|["']|$)`, object.get(step, "run", ""))
+# mise run as a command, by name or by any path (./mise, ~/.local/bin/mise),
+# where a shell command starts: the start of a line, after a separator, an
+# opening parenthesis or $(, inside bash -c "…", or after a wrapper's --,
+# past any VAR=value assignments and the wrappers env, time, sudo, nice, nohup,
+# exec, command, xargs and timeout <limit>. mise as an argument, as in
+# ls ~/.local/bin/mise or rm -rf ~/.cache/mise, is not a call, and neither are
+# mise.lock and mise-tasks/.
+runs_mise(step) if regex.match(command, object.get(step, "run", ""))
 
-# A binary called by its path, such as ~/.local/bin/mise install.
-runs_mise(step) if regex.match(`/bin/mise(\s|["']|$)`, object.get(step, "run", ""))
+command := `(^|\n|[;&|(]|\$\(|-c\s+["']|\s--\s)\s*(\w+=\S*\s+)*((env|time|sudo|nice|nohup|exec|command|xargs|timeout\s+\S+)\s+)*(\S*/)?mise(\s|["')]|$)`
 
 # ci alone, or ci first among several profiles, such as ci,release.
 ci_profile(value) if value == "ci"

@@ -26,10 +26,6 @@ test_valid_workflow_passes if count(denied(f.lines(f.workflow))) == 0
 
 test_mise_without_env_fails if denied(with_mise) == missing
 
-test_mise_after_another_command_fails if {
-	denied(lines_with("- run: mise install --locked", "- run: fsbench probe -- mise install --locked")) == missing
-}
-
 test_dev_profile_fails if {
 	denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: dev\n")) == missing
 }
@@ -50,10 +46,6 @@ test_profile_named_like_ci_fails if {
 	denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: cix\n")) == missing
 }
 
-test_mise_paths_are_not_mise if {
-	denied(lines_with("- run: mise install --locked", "- run: cat mise.lock mise-tasks/check.sh")) == {"job build, step 2 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"}
-}
-
 test_exception_applies if {
 	ex := workflow_mise_env.exception with input as with_mise
 		with data.conftest.file as f.file
@@ -67,14 +59,44 @@ test_step_profile_overrides_the_workflow if {
 	denied(f.lines(replace(workflow_ci, "      - run: mise install --locked", "      - run: mise install --locked\n        env:\n          MISE_ENV: dev"))) == {"job build, step 3 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"}
 }
 
-test_mise_behind_a_quote_a_path_or_at_the_end_fails if {
-	every run in [`bash -c "mise install"`, "~/.local/bin/mise install", "cd tools && mise"] {
-		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [run]))) == missing
+# Each run replaces the build job's `mise install --locked` step (step 3);
+# the mise-action step (step 2) still fails beside it.
+step_2 := "job build, step 2 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"
+
+calls := [
+	"fsbench probe -label x -- mise install --locked",
+	`bash -c "mise install"`,
+	"~/.local/bin/mise install",
+	"./mise install",
+	"/usr/local/mise install",
+	"$HOME/tools/mise install",
+	"cd tools && mise run test",
+	"cd tools && mise",
+	"MISE_YES=1 mise install",
+	"timeout 300 mise run test",
+	"echo start; mise verify",
+	"echo $(mise which go)",
+]
+
+not_calls := [
+	"rm -rf ~/.cache/mise",
+	"ls ~/.local/bin/mise",
+	"cat mise.lock mise-tasks/check.sh",
+	"fsbench fetch -lock mise.lock",
+]
+
+test_each_call_fails if {
+	every run in calls {
+		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)]))) == missing
 	}
 }
 
-test_mise_folder_is_not_mise if {
-	every run in ["rm -rf ~/.cache/mise", "ls ~/.local/share/mise"] {
-		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [run]))) == {"job build, step 2 runs mise without MISE_ENV=ci in its own, its job's or the workflow's env"}
+test_multi_line_call_fails if {
+	denied(lines_with("- run: mise install --locked", "- run: |\n          echo start\n          mise install --locked")) == missing
+}
+
+test_each_non_call_passes if {
+	every run in not_calls {
+		denied(lines_with("- run: mise install --locked", sprintf("- run: %s", [json.marshal(run)]))) == {step_2}
 	}
 }
