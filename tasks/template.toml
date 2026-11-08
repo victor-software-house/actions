@@ -177,10 +177,14 @@ if ! git diff --check; then
 fi
 # A piece's tasks can declare tools the locks do not hold yet, which the
 # pre-push lock check and a locked install reject. Lock exactly the tools that
-# check lists; mise lock takes the platforms from lockfile_platforms.
-read -ra missing <<<"$(mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')"
+# check lists, in the profiles .miserc.toml loads, as the check runs whatever
+# MISE_ENV the shell exports; one run writes each of their locks. mise lock
+# takes the platforms from lockfile_platforms. The assignment fails the task
+# when the dry run fails, which a here-string alone would hide.
+pending=$(env -u MISE_ENV mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')
+read -ra missing <<<"$pending"
 if ((${#missing[@]})); then
-  mise lock "${missing[@]}"
+  env -u MISE_ENV mise lock "${missing[@]}"
 fi
 echo "Turned on ${on[*]}."
 '''
