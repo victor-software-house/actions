@@ -56,6 +56,10 @@ on:
         description: Explicit size in GB matching the supplied persistent cache labels
         type: number
         default: 0
+      test-profiles:
+        description: Comma-separated mise profiles the Build and test job loads after ci, such as test
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -154,6 +158,13 @@ jobs:
       # A check:versions task reads a pull request that changes a manifest
       # version, to tell the Version PR apart from a hand edit.
       pull-requests: read
+    # Tools only the tests start, such as the shells a script test runs, live
+    # in their own mise profiles, which only this job loads, and not for a
+    # documentation-only change, which runs no test. mise-action's
+    # cache key carries MISE_ENV, and MISE_LOCK_HASH covers every
+    # mise.<profile>.lock, so this job's cache never mixes with the others'.
+    env:
+      MISE_ENV: ${{ needs.changes.outputs.build != 'false' && inputs.test-profiles != '' && format('ci,{0}', inputs.test-profiles) || 'ci' }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
