@@ -103,6 +103,15 @@ Public generated callers carry only their selected public configuration.
 It checks out the repository with its submodules, installs the locked tools
 with mise, restores mbx's compiled objects, and runs `mise run verify` with
 `MISE_ENV=ci` and git's first branch set to `main`.
+Tools only the tests start, such as the shells a script test runs, go in a
+mise profile of their own, `mise.<profile>.toml` with its
+`mise.<profile>.lock`, which the caller names in `test-profiles`:
+`test-profiles: test` gives `Build and test` `MISE_ENV=ci,test`, and the
+other jobs, and a documentation-only build, keep `MISE_ENV=ci`.
+A repository loads the same profile locally through `.miserc.toml`
+(`env = ["dev", "test"]`).
+The mise cache key carries `MISE_ENV` and the hash of every `mise*.lock`, so
+the build job's cache holds the profile's tools and no other job restores it.
 A cache step that fails, such as a save refused because the commit's key is already reserved on a re-run, does not fail the job: the result comes from the build and tests.
 The caller explicitly selects persistent-volume caching with `cache-volume`.
 A volume caller must supply its concrete read-only safety label and an explicit positive `cache-size` matching its runner labels.
@@ -192,6 +201,7 @@ stays current.
 | `read-only-label` | empty | Concrete safety label required when a persistent volume is selected |
 | `cache-size-label` | empty | Concrete capacity label present in both runner arrays |
 | `cache-size` | `0` | Explicit volume size in GB, matching the rendered capacity label |
+| `test-profiles` | empty | Comma-separated mise profiles `Build and test` loads after `ci`, such as `test` |
 
 ## Check the template version
 
