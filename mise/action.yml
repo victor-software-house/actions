@@ -1,0 +1,54 @@
+name: mise
+description: >-
+  Install the locked mise tools, downloading github.com release assets through
+  the organization's release mirror when the caller passes its address and
+  token, and save the tools cache
+author: victor-software-house
+
+inputs:
+  version:
+    description: The mise version to install
+    required: true
+  mirror-url:
+    description: The release mirror's address, the RELEASE_MIRROR_URL organization variable
+    default: ""
+  mirror-token:
+    description: The release mirror's token, the RELEASE_MIRROR_TOKEN organization secret
+    default: ""
+  install:
+    description: Install the tools; "false" only sets mise up
+    default: "true"
+  install_args:
+    description: Arguments for mise install, such as the tools of one job
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # A fork's pull request gets no secrets, so it downloads from GitHub, with
+    # Astral's own mirror for uv and Python. The netrc file is mise's own
+    # (MISE_NETRC_FILE), so git and curl in later steps never read the token.
+    - name: Route downloads through the release mirror
+      shell: sh
+      env:
+        MIRROR_URL: ${{ inputs.mirror-url }}
+        MIRROR_TOKEN: ${{ inputs.mirror-token }}
+      run: |
+        if [ -n "$MIRROR_URL" ] && [ -n "$MIRROR_TOKEN" ]; then
+          netrc="$RUNNER_TEMP/mise-mirror.netrc"
+          (umask 077 && printf 'machine %s login ci password %s\n' "${MIRROR_URL#https://}" "$MIRROR_TOKEN" >"$netrc")
+          echo "MISE_NETRC_FILE=$netrc" >>"$GITHUB_ENV"
+          echo "MISE_URL_REPLACEMENTS={\"https://github.com/\": \"${MIRROR_URL%/}/\"}" >>"$GITHUB_ENV"
+        else
+          echo 'MISE_URL_REPLACEMENTS={"https://github.com/astral-sh/": "https://releases.astral.sh/github/"}' >>"$GITHUB_ENV"
+        fi
+
+    # The action saves its tools cache only when it runs the install, and the
+    # post step saves it after the job, with the task tools in it.
+    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: ${{ inputs.version }}
+        install: ${{ inputs.install }}
+        install_args: ${{ inputs.install_args }}
+        cache: true
+        cache_save_post: true
