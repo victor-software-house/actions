@@ -6,7 +6,7 @@
 # the same checkout and takes no ref; in a published action it would resolve
 # against the caller's checkout, so it stays refused there.
 set -euo pipefail
-bad=$(git ls-files -z '*.yml' '*.yaml' | xargs -0 grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:' |
+bad=$(git ls-files -z '*.yml' '*.yaml' | xargs -0 grep -HnE '^[[:space:]]*(-[[:space:]]+)?uses:' |
   grep -vE 'uses:[[:space:]]+[^@[:space:]]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]*[^[:space:]]' |
   grep -vE '^\.github/workflows/[^:]+:[0-9]+:[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+\./' || true)
 if [ -n "$bad" ]; then
