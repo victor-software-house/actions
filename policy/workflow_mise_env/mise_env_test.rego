@@ -34,6 +34,10 @@ test_org_mise_action_without_env_fails if {
 	denied(f.lines(text_with("jdx/mise-action@", "victor-software-house/actions/mise@"))) == missing
 }
 
+test_fork_mise_action_without_env_fails if {
+	denied(f.lines(text_with("jdx/mise-action@", "victor-software-house/mise-action@"))) == missing
+}
+
 test_dev_profile_fails if {
 	denied(lines_with("permissions:\n  contents: read\n", "permissions:\n  contents: read\nenv:\n  MISE_ENV: dev\n")) == missing
 }
