@@ -35,8 +35,11 @@ runs:
         MIRROR_TOKEN: ${{ inputs.mirror-token }}
       run: |
         if [ -n "$MIRROR_URL" ] && [ -n "$MIRROR_TOKEN" ]; then
+          # netrc matches the bare host, without a path or port.
+          host=${MIRROR_URL#*://}
+          host=${host%%/*}
           netrc="$RUNNER_TEMP/mise-mirror.netrc"
-          (umask 077 && printf 'machine %s login ci password %s\n' "${MIRROR_URL#https://}" "$MIRROR_TOKEN" >"$netrc")
+          (umask 077 && printf 'machine %s login ci password %s\n' "${host%%:*}" "$MIRROR_TOKEN" >"$netrc")
           echo "MISE_NETRC_FILE=$netrc" >>"$GITHUB_ENV"
           echo "MISE_URL_REPLACEMENTS={\"https://github.com/\": \"${MIRROR_URL%/}/\"}" >>"$GITHUB_ENV"
         else
