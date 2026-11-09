@@ -33,6 +33,15 @@ inputs:
   cache_save_post:
     description: Save the tools cache after the job, with the task tools in it; "false" saves it right after the install
     default: "true"
+  cache_save:
+    description: Write the tools cache; "false" only reads it
+    default: "true"
+  cache_key_prefix:
+    description: The prefix of the default tools cache key; change it to start a new cache
+    default: mise-v1
+  sha256:
+    description: The SHA-256 checksum the mise binary must match; empty checks only mise's signed checksums
+    default: ""
 
 runs:
   using: composite
@@ -127,3 +136,6 @@ runs:
         cache: ${{ inputs.cache }}
         cache_key: ${{ inputs.cache_key }}
         cache_save_post: ${{ inputs.cache_save_post }}
+        cache_save: ${{ inputs.cache_save }}
+        cache_key_prefix: ${{ inputs.cache_key_prefix }}
+        sha256: ${{ inputs.sha256 }}
