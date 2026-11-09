@@ -60,11 +60,11 @@ on:
         description: Comma-separated mise profiles the Build and test job loads after ci, such as test
         type: string
         default: ""
-    secrets:
-      release-mirror-token:
-        description: The release mirror's password, the RELEASE_MIRROR_TOKEN organization secret; without it mise downloads from GitHub
-        required: false
 
+# `id-token: write` is a caller contract: the jobs that install tools exchange
+# the job's OIDC token for a release mirror session token, and GitHub refuses
+# to start a called workflow whose job asks for a permission its caller
+# withholds.
 permissions:
   contents: read
 
@@ -162,6 +162,8 @@ jobs:
       # A check:versions task reads a pull request that changes a manifest
       # version, to tell the Version PR apart from a hand edit.
       pull-requests: read
+      # The mise action's release mirror session token.
+      id-token: write
     # Tools only the tests start, such as the shells a script test runs, live
     # in their own mise profiles, which only this job loads, and not for a
     # documentation-only change, which runs no test. mise-action's
@@ -259,13 +261,12 @@ jobs:
         if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 3
-        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
+        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
         with:
           version: ${{ inputs.mise-version }}
-          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
           cache_save_post: "false"
@@ -306,13 +307,12 @@ jobs:
         id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
-        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
+        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
         with:
           version: ${{ inputs.mise-version }}
-          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
           cache_save_post: "false"
@@ -324,12 +324,11 @@ jobs:
       - name: Install the tools without Rust
         if: needs.changes.outputs.build == 'false'
         timeout-minutes: 3
-        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
+        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
         env:
           MISE_DISABLE_TOOLS: rust
         with:
           version: ${{ inputs.mise-version }}
-          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           cache: false
       - name: Documentation checks
@@ -527,6 +526,8 @@ jobs:
       TOOLCHAIN_CACHE: "true"
     permissions:
       contents: read
+      # The mise action's release mirror session token.
+      id-token: write
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -594,6 +595,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.read-only-runner) }}
     permissions:
       contents: read
+      # The mise action's release mirror session token.
+      id-token: write
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
