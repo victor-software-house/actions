@@ -60,6 +60,10 @@ on:
         description: Comma-separated mise profiles the Build and test job loads after ci, such as test
         type: string
         default: ""
+    secrets:
+      release-mirror-token:
+        description: The release mirror's password, the RELEASE_MIRROR_TOKEN organization secret; without it mise downloads from GitHub
+        required: false
 
 permissions:
   contents: read
@@ -78,6 +82,14 @@ env:
   # GitHub cache is saved after Verify, and a cache volume is trimmed by its
   # own step at the end of the job.
   MBX_GC_AUTO: "0"
+  # github.com release downloads go through the organization's release mirror
+  # when the caller passes its token; mise.lock's checksums still verify each
+  # file. The token goes in verbatim, so it holds only URL- and JSON-safe
+  # characters (hex), and GitHub masks it as a secret. Without it, as in a
+  # fork's or Dependabot's pull request, mise downloads from GitHub, with
+  # Astral's own mirror for uv and Python.
+  MISE_URL_REPLACEMENTS: >-
+    ${{ secrets.release-mirror-token && format('{{"https://github.com/": "https://ci:{0}@release-mirror.invalid/"}}', secrets.release-mirror-token) || '{"https://github.com/astral-sh/": "https://releases.astral.sh/github/"}' }}
 
 jobs:
   # Whether a pull request changes anything the build reads. Documentation is
