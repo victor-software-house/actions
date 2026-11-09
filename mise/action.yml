@@ -36,7 +36,13 @@ runs:
         MIRROR_TOKEN: ${{ inputs.mirror-token }}
       run: |
         if [ -n "$MIRROR_TOKEN" ]; then
+          # The token goes into a URL and a JSON string unescaped, so it may
+          # hold only URL-safe characters.
+          case "$MIRROR_TOKEN" in
+            *[!A-Za-z0-9._~-]*) echo "::error::mirror-token holds a character outside [A-Za-z0-9._~-]"; exit 1 ;;
+          esac
           mirror="${MIRROR_URL%/}"
+          case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
           echo "MISE_URL_REPLACEMENTS={\"https://github.com/\": \"${mirror%%://*}://ci:$MIRROR_TOKEN@${mirror#*://}/\"}" >>"$GITHUB_ENV"
         else
           echo 'MISE_URL_REPLACEMENTS={"https://github.com/astral-sh/": "https://releases.astral.sh/github/"}' >>"$GITHUB_ENV"
