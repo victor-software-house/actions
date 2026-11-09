@@ -26,7 +26,8 @@ jobs:
 - The job installs gitleaks from the caller's `mise.dev.toml`, with `MISE_ENV=dev,hooks`.
   `id-token: write` lets the [mise action](../mise/README.md) download it through the release mirror.
 - The install sets `MISE_LOCKED=1`, so mise takes the download URL and checksum from the caller's `mise.dev.lock` and writes no lock entries.
-  A gitleaks entry missing for linux-x64 fails the job instead of slowing it.
+  A gitleaks entry missing for the platform of the `runner` input fails the job instead of slowing it.
+  The default runner is linux-x64; a caller that picks a runner of another platform runs `mise lock --platform <os>-<arch>` for it.
   `MISE_NO_HOOKS=1` skips the caller's `[hooks]`, such as `lefthook install`.
 - It runs the caller's `hooks:secrets:history` task, which passes its arguments to `gitleaks git`.
 
