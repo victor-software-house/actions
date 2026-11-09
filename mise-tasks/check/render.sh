@@ -20,24 +20,28 @@ done
 printf '[task_config]\nincludes = [%s]\n' "$includes" >mise.toml
 # A dry run with no arguments stops at a task's first required argument, so
 # such a task runs again with a placeholder for each.
-render() {
-  local out
-  out=$(mise run --dry-run --no-deps "$@" 2>&1) || true
-  printf '%s\n' "$out"
-}
+# A task whose dry run still fails, rendered or not, counts as a failure.
+tasks=$(mise tasks ls --json | jq -r --arg work "$work" '.[] | select(.source | startswith($work)) | .name')
+if [ -z "$tasks" ]; then
+  echo "✘ found no tasks from tasks/*.toml" >&2
+  exit 1
+fi
 failed=0
 while IFS= read -r task; do
-  out=$(render "$task")
   args=()
-  while grep -q 'Missing required arg' <<<"$out" && [ "${#args[@]}" -lt 5 ]; do
+  while true; do
+    status=0
+    out=$(mise run --dry-run --no-deps "$task" "${args[@]}" 2>&1) || status=$?
+    if [ "$status" -eq 0 ] || ! grep -q 'Missing required arg' <<<"$out" || [ "${#args[@]}" -ge 5 ]; then
+      break
+    fi
     args+=(placeholder)
-    out=$(render "$task" "${args[@]}")
   done
-  if grep -qE 'Failed to render|not found$|Tera' <<<"$out"; then
+  if [ "$status" -ne 0 ]; then
     printf '✘ %s does not render:\n%s\n' "$task" "$out"
     failed=1
   else
     printf '✔ %s renders\n' "$task"
   fi
-done < <(mise tasks ls --json | jq -r --arg work "$work" '.[] | select(.source | startswith($work)) | .name')
+done <<<"$tasks"
 exit "$failed"
