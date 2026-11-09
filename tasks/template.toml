@@ -176,15 +176,34 @@ if ! git diff --check; then
   exit 1
 fi
 # A piece's tasks can declare tools the locks do not hold yet, which the
-# pre-push lock check and a locked install reject. Lock exactly the tools that
-# check lists, in the profiles .miserc.toml loads, as the check runs whatever
-# MISE_ENV the shell exports; one run writes each of their locks. mise lock
-# takes the platforms from lockfile_platforms. The assignment fails the task
-# when the dry run fails, which a here-string alone would hide.
-pending=$(env -u MISE_ENV mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')
-read -ra missing <<<"$pending"
-if [ -n "$pending" ]; then
-  env -u MISE_ENV mise lock "${missing[@]}"
-fi
+# pre-push lock check and a locked install reject. Lock exactly the tools a
+# dry run lists: once in the default profiles .miserc.toml loads, which also
+# covers mise.lock in a repository with no profile file, then once per
+# mise.<profile>.toml, tracked or just rendered by copier and not ignored, as
+# the pre-push check runs, since a dry run
+# sees only the locks of the profiles MISE_ENV loads. The hooks profile's
+# lock is never written, and mise.local.toml is a machine's own. mise lock
+# takes the platforms from lockfile_platforms. The assignments fail the task
+# when git or a dry run fails, which a here-string alone would hide.
+lock_missing() {
+  local pending missing
+  pending=$("$@" mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')
+  read -ra missing <<<"$pending"
+  if [ -n "$pending" ]; then
+    "$@" mise lock "${missing[@]}"
+  fi
+}
+lock_missing env -u MISE_ENV
+configs=$(git ls-files --cached --others --exclude-standard -- 'mise.*.toml')
+for config in $configs; do
+  # The index still lists a profile file deleted from the working tree.
+  [ -f "$config" ] || continue
+  profile=${config#mise.}
+  profile=${profile%.toml}
+  case $profile in
+    hooks | local | *.local) continue ;;
+  esac
+  lock_missing env MISE_ENV="$profile"
+done
 echo "Turned on ${on[*]}."
 '''
