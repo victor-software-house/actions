@@ -10,6 +10,9 @@ catalog="$PWD/tasks/rust.toml"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export MISE_TRUSTED_CONFIG_PATHS="$work"
+# A git hook exports these for the repository it runs in, and git init and
+# git add in a probe would then write that repository's index.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 
 meta_msg='✘ [package.metadata.docs.rs] needs'
 cfg_msg='✘ no #![cfg_attr(docsrs, feature(doc_cfg))]'
