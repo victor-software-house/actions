@@ -25,11 +25,13 @@ Use it in place of `jdx/mise-action`:
 ```yaml
 - uses: victor-software-house/actions/mise@<commit> # <tag>
   with:
-    version: 2026.11.1
+    version: 2026.11.5
     mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
 ```
 
 - With the token, mise fetches every github.com download from the mirror, and `mise.lock`'s checksums verify each file.
+- With the token, the action also fetches mise itself from the mirror, and `jdx/mise-action` checks it against mise's signed checksums before it runs it.
+- `working_directory`, `cache`, `cache_key`, `cache_save_post`, `install` and `install_args` go to `jdx/mise-action` as they are. `cache_save_post` defaults to `true` here.
 - Without it, as in a fork's pull request, mise downloads from GitHub.
 - The token goes in the replacement URL's userinfo. mise sends it as HTTP Basic credentials and redacts it from its logs, and GitHub masks it as a secret.
 - The action saves the tools cache after the job. A run on the default branch saves the cache that pull requests read.
