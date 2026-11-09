@@ -1,0 +1,9 @@
+# Hooks call mise tasks, so a hook runs the same command as CI. mise.dev.toml
+# installs them through its postinstall hook; CI never loads that file, so no
+# runner has them.
+pre-push:
+  commands:
+    # Every check here is static and takes seconds: actionlint, the pin
+    # check, the catalogs and the workflow policy.
+    verify:
+      run: mise run verify
