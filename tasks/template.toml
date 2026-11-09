@@ -196,6 +196,8 @@ lock_missing() {
 lock_missing env -u MISE_ENV
 configs=$(git ls-files --cached --others --exclude-standard -- 'mise.*.toml')
 for config in $configs; do
+  # The index still lists a profile file deleted from the working tree.
+  [ -f "$config" ] || continue
   profile=${config#mise.}
   profile=${profile%.toml}
   case $profile in
