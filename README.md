@@ -15,25 +15,30 @@ only the line that pins it.
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 | `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
 | `policy/` | The workflow policy: six Rego packages, one per rule, that conftest pulls by commit and runs over a repository's workflows |
-| `mise/` | The `mise` action: installs the locked tools and saves the tools cache, downloading github.com release assets through the organization's release mirror when given its token |
+| `mise/` | The `mise` action: installs the locked tools and saves the tools cache, downloading github.com release assets through the organization's release mirror when the job grants `id-token: write` |
 | `macos-signing/` | The signing actions: `macos-signing` loads the CI Developer ID identities and the notary key from 1Password into a temporary keychain, `macos-signing/delete` removes them |
 
 ## Install tools with the mise action
 
-Use it in place of `jdx/mise-action`:
+Use it in place of `jdx/mise-action`, in a job that grants `id-token: write`:
 
 ```yaml
-- uses: victor-software-house/actions/mise@<commit> # <tag>
-  with:
-    version: 2026.11.5
-    mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
+permissions:
+  contents: read
+  id-token: write
+steps:
+  - uses: victor-software-house/actions/mise@<commit> # <tag>
+    with:
+      version: 2026.11.5
 ```
 
-- With the token, mise fetches every github.com download from the mirror, and `mise.lock`'s checksums verify each file.
+- The action requests the job's OIDC token for the mirror's address and exchanges it at the mirror's `POST /token` for a session token that lasts six hours. No caller holds a mirror secret.
+- With the session token, mise fetches every github.com download from the mirror, and `mise.lock`'s checksums verify each file.
 - The action runs the organization's fork of `jdx/mise-action`, [victor-software-house/mise-action](https://github.com/victor-software-house/mise-action), which applies the same URL replacements to its own downloads of mise. It restores the tools cache first, so a cache hit downloads nothing, and it still checks mise against mise's signed checksums. When the mirror fails, it warns and downloads from GitHub.
 - `working_directory`, `cache`, `cache_key`, `cache_key_prefix`, `cache_save`, `cache_save_post`, `sha256`, `install` and `install_args` go to the fork as they are. `cache_save_post` defaults to `true` here.
-- Without it, as in a fork's pull request, mise downloads from GitHub.
-- The token goes in the replacement URL's userinfo. mise sends it as HTTP Basic credentials and redacts it from its logs, and GitHub masks it as a secret.
+- A job without `id-token: write`, such as a fork's pull request, downloads from GitHub, and the action logs a notice. A failed exchange downloads from GitHub too, with a warning.
+- The session token goes in the replacement URL's userinfo. mise sends it as HTTP Basic credentials and redacts it from its logs, and the action masks it in every log. Every later step of the job can read it through `MISE_URL_REPLACEMENTS`; it opens only the mirror's downloads, and only until it expires.
+- `mirror-url` names another mirror; the OIDC token's audience is that address.
 - The action saves the tools cache after the job. A run on the default branch saves the cache that pull requests read.
 
 ## Use the Rust catalog
@@ -106,14 +111,16 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
       pull-requests: read
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
     with:
       mise-version: 2026.10.25
 ```
 
-A reusable workflow gets no permission its caller withholds: `Changes` and `Static checks` read the pull request, and `Verify` reads the run and its newer runs (`actions: read`).
-GitHub refuses to start the workflow when the caller withholds one of them, so a caller grants `actions: read` in the same change that moves its pin to a commit whose `Verify` asks for it.
+A reusable workflow gets no permission its caller withholds: `Changes` and `Static checks` read the pull request, `Verify` reads the run and its newer runs (`actions: read`), and the jobs that install tools request an OIDC token for the release mirror (`id-token: write`).
+GitHub refuses to start the workflow when the caller withholds one of them, so a caller grants `actions: read` and `id-token: write` in the same change that moves its pin to a commit whose jobs ask for them.
+With `id-token: write`, every step of those jobs, the pull request's build scripts and tests included, can request an OIDC token for any audience. A branch in the same repository could grant itself that permission in its own workflow anyway, and a fork's pull request gets no token. Keep every cloud or federation trust policy off these repositories' `pull_request` subject.
 
 The caller supplies final build labels as JSON in `build-runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
 Repository visibility, provider selection and machine sizes are resolved when the caller is rendered, not by this workflow.
@@ -261,6 +268,7 @@ jobs:
     uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # <tag>
     permissions:
       contents: read
+      id-token: write
       issues: write
     with:
       mise-version: 2026.10.25
@@ -314,6 +322,9 @@ on:
 jobs:
   secrets:
     uses: victor-software-house/actions/.github/workflows/secrets.yml@<commit> # <tag>
+    permissions:
+      contents: read
+      id-token: write
     with:
       mise-version: 2026.10.25
 ```
