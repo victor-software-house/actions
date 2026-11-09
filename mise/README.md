@@ -2,22 +2,31 @@
 
 Installs the locked mise tools and saves the tools cache.
 It sends github.com downloads through the organization's release mirror.
-Use it in place of `jdx/mise-action`:
+Use it in place of `jdx/mise-action`, in a job that grants `id-token: write`:
 
 ```yaml
-- uses: victor-software-house/actions/mise@<commit> # main, <date>
-  with:
-    version: 2026.11.5
-    mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
+permissions:
+  contents: read
+  id-token: write
+steps:
+  - uses: victor-software-house/actions/mise@<commit> # main, <date>
+    with:
+      version: 2026.11.5
 ```
 
 ## Downloads
 
-- With `mirror-token`, mise fetches every github.com release asset from the mirror.
+- The action requests the job's OIDC token for the mirror's address.
+  It exchanges that token at the mirror's `POST /token` for a session token that lasts six hours.
+  No caller holds a mirror secret.
+- With the session token, mise fetches every github.com release asset from the mirror.
   `mise.lock`'s checksums verify each file.
-- The token goes in the replacement URL, which mise sends as HTTP Basic credentials.
-  mise redacts it from its logs, and GitHub masks it as a secret.
-- Without the token, as in a fork's pull request, mise downloads from GitHub.
+- The session token goes in the replacement URL, which mise sends as HTTP Basic credentials.
+  mise redacts it from its logs, and the action masks it in every log.
+- Every later step of the job can read the session token through `MISE_URL_REPLACEMENTS`.
+  It opens only the mirror's downloads, and only until it expires.
+- A job without `id-token: write`, such as a fork's pull request, downloads from GitHub, and the action logs a notice.
+  A failed exchange downloads from GitHub too, with a warning.
   uv and Python then come from Astral's own mirror.
 
 ## mise itself
@@ -40,8 +49,7 @@ A run on the default branch saves the cache that pull requests read.
 | Input | Default | Effect |
 |:--|:--|:--|
 | `version` | required | The mise release to install |
-| `mirror-url` | `https://releases.vsh.dev` | The release mirror's address |
-| `mirror-token` | empty | The `RELEASE_MIRROR_TOKEN` organization secret |
+| `mirror-url` | `https://releases.vsh.dev` | The release mirror's address, and the OIDC token's audience |
 | `install` | `true` | `false` only sets mise up |
 | `install_args` | empty | Arguments for `mise install`, such as one job's tools |
 | `working_directory` | empty | The directory mise runs in |
@@ -52,4 +60,4 @@ A run on the default branch saves the cache that pull requests read.
 | `cache_key_prefix` | `mise-v1` | The default key's prefix; change it to start a new cache |
 | `sha256` | empty | The checksum the mise binary must match, beside the signed checksums |
 
-Every input after `mirror-token` goes to the fork unchanged.
+Every input after `install` goes to the fork unchanged.

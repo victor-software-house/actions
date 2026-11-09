@@ -13,6 +13,9 @@ on:
 jobs:
   secrets:
     uses: victor-software-house/actions/.github/workflows/secrets.yml@<commit> # main, <date>
+    permissions:
+      contents: read
+      id-token: write
     with:
       mise-version: 2026.10.25
 ```
@@ -21,6 +24,7 @@ jobs:
 - A scheduled or dispatched run scans the whole history.
   The pre-push hook scans only the commits it pushes, so the full scan runs here once a day.
 - The job installs gitleaks from the caller's `mise.dev.toml`, with `MISE_ENV=dev,hooks`.
+  `id-token: write` lets the [mise action](../mise/README.md) download it through the release mirror.
 - It runs the caller's `hooks:secrets:history` task, which passes its arguments to `gitleaks git`.
 
 ## Inputs

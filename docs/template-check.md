@@ -6,7 +6,7 @@ It fails when the newest tag of the repository's Copier template would change th
 ## Caller
 
 The caller runs on pull requests, merge queue entries and daily.
-It passes only the template-reader App's private key:
+It grants `id-token: write` for the [mise action](../mise/README.md), and passes only the template-reader App's private key:
 
 ```yaml
 on:
@@ -20,6 +20,7 @@ jobs:
     uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # main, <date>
     permissions:
       contents: read
+      id-token: write
       issues: write
     with:
       mise-version: 2026.10.25
