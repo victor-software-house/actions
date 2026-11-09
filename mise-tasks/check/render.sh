@@ -31,7 +31,7 @@ while IFS= read -r task; do
   args=()
   while true; do
     status=0
-    out=$(mise run --dry-run --no-deps "$task" "${args[@]}" 2>&1) || status=$?
+    out=$(mise run --dry-run --no-deps "$task" ${args[@]+"${args[@]}"} 2>&1) || status=$?
     if [ "$status" -eq 0 ] || ! grep -q 'Missing required arg' <<<"$out" || [ "${#args[@]}" -ge 5 ]; then
       break
     fi
