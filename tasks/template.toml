@@ -179,7 +179,8 @@ fi
 # pre-push lock check and a locked install reject. Lock exactly the tools a
 # dry run lists: once in the default profiles .miserc.toml loads, which also
 # covers mise.lock in a repository with no profile file, then once per
-# tracked mise.<profile>.toml, as the pre-push check runs, since a dry run
+# mise.<profile>.toml, tracked or just rendered by copier and not ignored, as
+# the pre-push check runs, since a dry run
 # sees only the locks of the profiles MISE_ENV loads. The hooks profile's
 # lock is never written, and mise.local.toml is a machine's own. mise lock
 # takes the platforms from lockfile_platforms. The assignments fail the task
@@ -193,7 +194,7 @@ lock_missing() {
   fi
 }
 lock_missing env -u MISE_ENV
-configs=$(git ls-files -- 'mise.*.toml')
+configs=$(git ls-files --cached --others --exclude-standard -- 'mise.*.toml')
 for config in $configs; do
   profile=${config#mise.}
   profile=${profile%.toml}
