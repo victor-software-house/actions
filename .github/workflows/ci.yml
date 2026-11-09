@@ -26,9 +26,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install locked tools
-        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        uses: ./mise
         with:
           version: 2026.10.25
-          cache: true
+          mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
       - name: Verify
         run: mise run verify
