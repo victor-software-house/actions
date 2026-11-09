@@ -201,13 +201,16 @@ jobs:
           repositories: ${{ steps.template.outputs.name }}
           permission-contents: read
       - name: Install mise
-        uses: victor-software-house/actions/mise@944c8e9a24ae12340bc67687b85cfd1381f4f866 # feat/mise-binary-mirror, 2026-11-09
+        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
         with:
           version: ${{ inputs.mise-version }}
           mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           # The check needs only its own tools, not the repository's toolchain.
           install: false
+          # A job that installs only some tools saves no cache that a full
+          # install would restore.
+          cache_save_post: "false"
       - name: Install the check's tools
         run: |
           spec=$(mise tasks info template:check --json | jq -r '.tools | to_entries[] | "\(.key)@\(.value)"')
