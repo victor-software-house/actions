@@ -259,7 +259,7 @@ jobs:
         if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 3
-        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
+        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
@@ -306,7 +306,7 @@ jobs:
         id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
-        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
+        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
@@ -324,7 +324,7 @@ jobs:
       - name: Install the tools without Rust
         if: needs.changes.outputs.build == 'false'
         timeout-minutes: 3
-        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
+        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
         env:
           MISE_DISABLE_TOOLS: rust
         with:
