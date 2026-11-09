@@ -13,6 +13,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
       pull-requests: read
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # main, <date>
     with:
@@ -23,9 +24,15 @@ A reusable workflow gets no permission its caller withholds:
 
 - `Changes` and `Static checks` read the pull request.
 - `Verify` reads the run and its newer runs, with `actions: read`.
+- The jobs that install tools request an OIDC token for the release mirror, with `id-token: write`.
 
 GitHub refuses to start the workflow when the caller withholds one of them.
-So a caller grants `actions: read` in the same change that moves its pin to a commit whose `Verify` asks for it.
+So a caller grants `actions: read` and `id-token: write` in the same change that moves its pin to a commit whose jobs ask for them.
+
+With `id-token: write`, every step of those jobs can request an OIDC token for any audience.
+That includes the pull request's build scripts and tests.
+A branch in the same repository could grant itself that permission in its own workflow anyway, and a fork's pull request gets no token.
+Keep every cloud or federation trust policy off these repositories' `pull_request` subject.
 
 ## Jobs
 
