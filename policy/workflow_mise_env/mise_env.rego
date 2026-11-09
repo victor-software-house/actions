@@ -9,7 +9,10 @@ import rego.v1
 
 runs_mise(step) if startswith(object.get(step, "uses", ""), "jdx/mise-action@")
 
-# The organization's mise action runs jdx/mise-action inside it.
+# The organization's fork of jdx/mise-action, and the organization's mise
+# action, which runs the fork inside it.
+runs_mise(step) if startswith(object.get(step, "uses", ""), "victor-software-house/mise-action@")
+
 runs_mise(step) if startswith(object.get(step, "uses", ""), "victor-software-house/actions/mise@")
 
 # Any step whose script names the word mise runs it, wherever it stands: after

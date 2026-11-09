@@ -30,8 +30,8 @@ Use it in place of `jdx/mise-action`:
 ```
 
 - With the token, mise fetches every github.com download from the mirror, and `mise.lock`'s checksums verify each file.
-- With the token, the action also fetches mise itself from the mirror, and `jdx/mise-action` checks it against mise's signed checksums before it runs it.
-- `working_directory`, `cache`, `cache_key`, `cache_key_prefix`, `cache_save`, `cache_save_post`, `sha256`, `install` and `install_args` go to `jdx/mise-action` as they are. `cache_save_post` defaults to `true` here.
+- The action runs the organization's fork of `jdx/mise-action`, [victor-software-house/mise-action](https://github.com/victor-software-house/mise-action), which applies the same URL replacements to its own downloads of mise. It restores the tools cache first, so a cache hit downloads nothing, and it still checks mise against mise's signed checksums. When the mirror fails, it warns and downloads from GitHub.
+- `working_directory`, `cache`, `cache_key`, `cache_key_prefix`, `cache_save`, `cache_save_post`, `sha256`, `install` and `install_args` go to the fork as they are. `cache_save_post` defaults to `true` here.
 - Without it, as in a fork's pull request, mise downloads from GitHub.
 - The token goes in the replacement URL's userinfo. mise sends it as HTTP Basic credentials and redacts it from its logs, and GitHub masks it as a secret.
 - The action saves the tools cache after the job. A run on the default branch saves the cache that pull requests read.
