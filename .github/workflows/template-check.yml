@@ -208,9 +208,6 @@ jobs:
           working_directory: ${{ inputs.working-directory }}
           # The check needs only its own tools, not the repository's toolchain.
           install: false
-          # A job that installs only some tools saves no cache that a full
-          # install would restore.
-          cache_save_post: "false"
       - name: Install the check's tools
         run: |
           spec=$(mise tasks info template:check --json | jq -r '.tools | to_entries[] | "\(.key)@\(.value)"')
