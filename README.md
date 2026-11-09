@@ -15,7 +15,24 @@ only the line that pins it.
 | `.github/workflows/template-check.yml` | The reusable drift check: a `Template` job that runs `template:check` with a token that reads the template, skipped for a pull request that touches none of the caller's `paths` |
 | `.github/workflows/secrets.yml` | The reusable credential scan: a `Secrets` job that runs gitleaks over a pull request's own commits, or over the whole history on a schedule |
 | `policy/` | The workflow policy: six Rego packages, one per rule, that conftest pulls by commit and runs over a repository's workflows |
+| `mise/` | The `mise` action: installs the locked tools and saves the tools cache, downloading github.com release assets through the organization's release mirror when given its token |
 | `macos-signing/` | The signing actions: `macos-signing` loads the CI Developer ID identities and the notary key from 1Password into a temporary keychain, `macos-signing/delete` removes them |
+
+## Install tools with the mise action
+
+Use it in place of `jdx/mise-action`:
+
+```yaml
+- uses: victor-software-house/actions/mise@<commit> # <tag>
+  with:
+    version: 2026.11.1
+    mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
+```
+
+- With the token, mise fetches every github.com download from the mirror, and `mise.lock`'s checksums verify each file.
+- Without it, as in a fork's pull request, mise downloads from GitHub.
+- The token goes in the replacement URL's userinfo. mise sends it as HTTP Basic credentials and redacts it from its logs, and GitHub masks it as a secret.
+- The action saves the tools cache after the job. A run on the default branch saves the cache that pull requests read.
 
 ## Use the Rust catalog
 
