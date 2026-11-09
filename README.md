@@ -111,14 +111,16 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
       pull-requests: read
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # <tag>
     with:
       mise-version: 2026.10.25
 ```
 
-A reusable workflow gets no permission its caller withholds: `Changes` and `Static checks` read the pull request, and `Verify` reads the run and its newer runs (`actions: read`).
-GitHub refuses to start the workflow when the caller withholds one of them, so a caller grants `actions: read` in the same change that moves its pin to a commit whose `Verify` asks for it.
+A reusable workflow gets no permission its caller withholds: `Changes` and `Static checks` read the pull request, `Verify` reads the run and its newer runs (`actions: read`), and the jobs that install tools request an OIDC token for the release mirror (`id-token: write`).
+GitHub refuses to start the workflow when the caller withholds one of them, so a caller grants `actions: read` and `id-token: write` in the same change that moves its pin to a commit whose jobs ask for them.
+With `id-token: write`, every step of those jobs, the pull request's build scripts and tests included, can request an OIDC token for any audience. A branch in the same repository could grant itself that permission in its own workflow anyway, and a fork's pull request gets no token. Keep every cloud or federation trust policy off these repositories' `pull_request` subject.
 
 The caller supplies final build labels as JSON in `build-runner`, final read-only labels in `read-only-runner`, and a concrete `light-runner` label.
 Repository visibility, provider selection and machine sizes are resolved when the caller is rendered, not by this workflow.
@@ -266,6 +268,7 @@ jobs:
     uses: victor-software-house/actions/.github/workflows/template-check.yml@<commit> # <tag>
     permissions:
       contents: read
+      id-token: write
       issues: write
     with:
       mise-version: 2026.10.25
@@ -319,6 +322,9 @@ on:
 jobs:
   secrets:
     uses: victor-software-house/actions/.github/workflows/secrets.yml@<commit> # <tag>
+    permissions:
+      contents: read
+      id-token: write
     with:
       mise-version: 2026.10.25
 ```
