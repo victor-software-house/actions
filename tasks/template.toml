@@ -183,7 +183,7 @@ fi
 # when the dry run fails, which a here-string alone would hide.
 pending=$(env -u MISE_ENV mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')
 read -ra missing <<<"$pending"
-if ((${#missing[@]})); then
+if [ -n "$pending" ]; then
   env -u MISE_ENV mise lock "${missing[@]}"
 fi
 echo "Turned on ${on[*]}."
