@@ -64,6 +64,9 @@ on:
       TEMPLATES_APP_PRIVATE_KEY:
         description: The private key of the App that reads the template; its client id is the TEMPLATES_APP_CLIENT_ID variable
         required: true
+      release-mirror-token:
+        description: The release mirror's password, the RELEASE_MIRROR_TOKEN organization secret; without it mise downloads from GitHub
+        required: false
 
 permissions:
   contents: read
@@ -71,6 +74,14 @@ permissions:
 env:
   # The CI profile; local work loads dev from .miserc.toml, which CI never does.
   MISE_ENV: ci
+  # github.com release downloads go through the organization's release mirror
+  # when the caller passes its token; mise.lock's checksums still verify each
+  # file. The token goes in verbatim, so it holds only URL- and JSON-safe
+  # characters (hex), and GitHub masks it as a secret. Without it, as in a
+  # fork's or Dependabot's pull request, mise downloads from GitHub, with
+  # Astral's own mirror for uv and Python.
+  MISE_URL_REPLACEMENTS: >-
+    ${{ secrets.release-mirror-token && format('{{"https://github.com/": "https://ci:{0}@releases.vsh.dev/"}}', secrets.release-mirror-token) || '{"https://github.com/astral-sh/": "https://releases.astral.sh/github/"}' }}
 
 jobs:
   # Whether a pull request touches a file the template renders. git's glob
