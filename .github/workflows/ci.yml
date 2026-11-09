@@ -34,7 +34,7 @@ jobs:
       - name: Install locked tools
         uses: ./mise
         with:
-          version: 2026.10.25
+          version: 2026.11.5
           mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
       - name: Verify
         run: mise run verify
