@@ -72,19 +72,17 @@ runs:
     # jdx/mise-action downloads mise itself from github.com, outside the URL
     # replacements. It keeps a mise it finds in its data directory's bin
     # once the binary matches SHASUMS256-<version>.txt there and the
-    # minisign signature beside it verifies, so this step fetches the three
-    # files from the mirror and the action still checks them against mise's
+    # minisign signature beside it verifies, so the steps below put the
+    # three files there and the action still checks them against mise's
     # signing key. Windows, and a run without the token, download from
     # GitHub as before.
-    - name: Fetch mise through the release mirror
+    - name: Locate mise
+      id: mise-bin
       if: inputs.mirror-token != '' && runner.os != 'Windows'
       shell: sh
       env:
         VERSION: ${{ inputs.version }}
-        MIRROR_URL: ${{ inputs.mirror-url }}
-        MIRROR_TOKEN: ${{ inputs.mirror-token }}
       run: |
-        set -u
         version=${VERSION#v}
         case "$RUNNER_OS" in
           macOS) os=macos ;;
@@ -100,29 +98,81 @@ runs:
         fi
         # The directory jdx/mise-action takes when no mise_dir is given.
         dir="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/bin"
+        {
+          echo "version=$version"
+          echo "target=$target"
+          echo "dir=$dir"
+        } >>"$GITHUB_OUTPUT"
+
+    # The binary has its own small cache, keyed by version and target, and
+    # is restored before the fetch: the tools cache that jdx/mise-action
+    # restores also holds it, but only after this point. A hit skips the
+    # download; a miss fetches mise once, and the job saves it.
+    - name: Restore the mise binary
+      if: steps.mise-bin.outcome == 'success' && inputs.cache == 'true' && inputs.cache_save == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.mise-bin.outputs.dir }}/mise
+          ${{ steps.mise-bin.outputs.dir }}/SHASUMS256-${{ steps.mise-bin.outputs.version }}.txt
+          ${{ steps.mise-bin.outputs.dir }}/SHASUMS256-${{ steps.mise-bin.outputs.version }}.txt.minisig
+        key: ${{ inputs.cache_key_prefix }}-bin-${{ steps.mise-bin.outputs.target }}-${{ steps.mise-bin.outputs.version }}
+    - name: Restore the mise binary, read only
+      if: steps.mise-bin.outcome == 'success' && inputs.cache == 'true' && inputs.cache_save != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.mise-bin.outputs.dir }}/mise
+          ${{ steps.mise-bin.outputs.dir }}/SHASUMS256-${{ steps.mise-bin.outputs.version }}.txt
+          ${{ steps.mise-bin.outputs.dir }}/SHASUMS256-${{ steps.mise-bin.outputs.version }}.txt.minisig
+        key: ${{ inputs.cache_key_prefix }}-bin-${{ steps.mise-bin.outputs.target }}-${{ steps.mise-bin.outputs.version }}
+
+    - name: Fetch mise through the release mirror
+      if: steps.mise-bin.outcome == 'success'
+      shell: sh
+      env:
+        VERSION: ${{ steps.mise-bin.outputs.version }}
+        TARGET: ${{ steps.mise-bin.outputs.target }}
+        DIR: ${{ steps.mise-bin.outputs.dir }}
+        MIRROR_URL: ${{ inputs.mirror-url }}
+        MIRROR_TOKEN: ${{ inputs.mirror-token }}
+      run: |
+        set -u
+        version=$VERSION
+        dir=$DIR
         if [ -e "$dir/mise" ]; then
+          echo "mise $version restored from the cache"
           exit 0
         fi
         mirror="${MIRROR_URL%/}"
         case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
         base="$mirror/jdx/mise/releases/download/v$version"
         fetch() {
-          curl -fsSL --retry 3 --user "ci:$MIRROR_TOKEN" -o "$2" "$base/$1"
+          curl -fsSL --retry 3 --user "ci:$MIRROR_TOKEN" -o "$2" \
+            -w "fetched $1: %{size_download} bytes in %{time_total} s\n" "$base/$1"
         }
-        # The tarball is a third the size of the bare binary it holds, and
-        # the binary inside matches the bare one's checksum.
+        # mise publishes every target as .tar.zst and .tar.gz. The zstd
+        # archive is 30% smaller and unpacks faster; tar needs zstd for it.
+        if command -v zstd >/dev/null 2>&1 && tar --zstd --version >/dev/null 2>&1; then
+          ext=tar.zst
+          unpack="--zstd -xf"
+        else
+          ext=tar.gz
+          unpack="-xzf"
+        fi
+        # The binary inside the archive matches the bare one's checksum.
         if mkdir -p "$dir" &&
           fetch SHASUMS256.txt "$dir/SHASUMS256-$version.txt" &&
           fetch SHASUMS256.txt.minisig "$dir/SHASUMS256-$version.txt.minisig" &&
-          fetch "mise-v$version-$target.tar.gz" "$dir/mise.tar.gz" &&
-          tar -xzf "$dir/mise.tar.gz" -O mise/bin/mise >"$dir/mise.part" &&
+          fetch "mise-v$version-$TARGET.$ext" "$dir/mise.$ext" &&
+          tar $unpack "$dir/mise.$ext" -O mise/bin/mise >"$dir/mise.part" &&
           chmod +x "$dir/mise.part" &&
           mv "$dir/mise.part" "$dir/mise"; then
-          rm -f "$dir/mise.tar.gz"
+          rm -f "$dir/mise.$ext"
         else
           # jdx/mise-action then downloads mise from GitHub, as without the
           # token.
-          rm -f "$dir/mise.tar.gz" "$dir/mise.part" "$dir/mise" \
+          rm -f "$dir/mise.$ext" "$dir/mise.part" "$dir/mise" \
             "$dir/SHASUMS256-$version.txt" "$dir/SHASUMS256-$version.txt.minisig"
           echo "::warning::Could not fetch mise $version from the release mirror; downloading it from GitHub"
         fi
