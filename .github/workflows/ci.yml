@@ -29,7 +29,6 @@ jobs:
         uses: ./mise
         with:
           version: 2026.10.25
-          mirror-url: ${{ vars.RELEASE_MIRROR_URL }}
           mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
       - name: Verify
         run: mise run verify
