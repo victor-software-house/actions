@@ -393,6 +393,10 @@ validator names the rule, and nothing changes.
 in, and runs `copier update --vcs-ref=:current:`.
 A file the repository kept comes back with inline conflict markers between
 its copy and the template's; the task fails and `git diff --check` lists them.
+A piece's tasks can declare tools the locks do not hold yet, such as Vale for
+`lint_prose`, so the task then locks exactly the tools
+`mise lock --dry-run --json` lists, for the platforms in `lockfile_platforms`.
+The pre-push lock check and a locked install then pass.
 
 ## Check workflows against the policy
 
