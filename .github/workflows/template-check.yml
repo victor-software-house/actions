@@ -18,6 +18,7 @@
 #       permissions:
 #         contents: read
 #         issues: write
+#         id-token: write
 #       with:
 #         mise-version: <mise version>
 #         paths: |
@@ -25,7 +26,6 @@
 #           <each file the template renders>
 #       secrets:
 #         TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
-#         release-mirror-token: ${{ secrets.RELEASE_MIRROR_TOKEN }}
 #
 # The caller includes tasks/template.toml, whose template:check does the work,
 # so a developer runs the same check with `mise run template:check`.
@@ -65,10 +65,11 @@ on:
       TEMPLATES_APP_PRIVATE_KEY:
         description: The private key of the App that reads the template; its client id is the TEMPLATES_APP_CLIENT_ID variable
         required: true
-      release-mirror-token:
-        description: The release mirror's password, the RELEASE_MIRROR_TOKEN organization secret; without it mise downloads from GitHub
-        required: false
 
+# `id-token: write` is a caller contract: the jobs that install tools exchange
+# the job's OIDC token for a release mirror session token, and GitHub refuses
+# to start a called workflow whose job asks for a permission its caller
+# withholds.
 permissions:
   contents: read
 
@@ -138,12 +139,14 @@ jobs:
       && !github.event.pull_request.draft
       && (github.event_name != 'pull_request' || inputs.paths == '' || needs.changes.outputs.template != 'false')
     # GitHub checks these against the caller's grant when the run starts,
-    # whatever the event, so a caller grants issues: write in the same change
-    # that moves its pin to this workflow.
+    # whatever the event, so a caller grants issues: write and id-token: write
+    # in the same change that moves its pin to this workflow.
     permissions:
       contents: read
       # The drift issue, written only on the default branch.
       issues: write
+      # The mise action's release mirror session token.
+      id-token: write
     # Runs outside pull requests take turns, so two of them never open two
     # issues. Each pull request run has a group of its own.
     concurrency:
@@ -201,10 +204,9 @@ jobs:
           repositories: ${{ steps.template.outputs.name }}
           permission-contents: read
       - name: Install mise
-        uses: victor-software-house/actions/mise@dec9ec1aaa6b08b1424deb891c88ee50dd26da07 # main, 2026-11-09
+        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
         with:
           version: ${{ inputs.mise-version }}
-          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           # The check needs only its own tools, not the repository's toolchain.
           install: false
