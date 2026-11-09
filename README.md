@@ -415,8 +415,9 @@ its copy and the template's; the task fails and `git diff --check` lists them.
 A piece's tasks can declare tools the locks do not hold yet, such as Vale for
 `lint_prose`, so the task then locks exactly the tools
 `mise lock --dry-run --json` lists, for the platforms in `lockfile_platforms`.
-It runs once per committed `mise.<profile>.toml` except `hooks`, so the `ci`
-and `release` locks get the tools too.
+It runs once in the default profiles, then once per tracked
+`mise.<profile>.toml` except `hooks`, so the `ci` and `release` locks get the
+tools too.
 The pre-push lock check and a locked install then pass.
 
 ## Check workflows against the policy
