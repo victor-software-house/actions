@@ -30,7 +30,7 @@ Use it in place of `jdx/mise-action`:
 ```
 
 - With the token, mise fetches every github.com download from the mirror, and `mise.lock`'s checksums verify each file.
-- With the token, the action also fetches mise itself from the mirror, and `jdx/mise-action` checks it against mise's signed checksums before it runs it.
+- With the token, the action also fetches mise itself from the mirror, as `.tar.zst` when tar can unpack it, and `jdx/mise-action` checks it against mise's signed checksums before it runs it. The binary has its own cache, keyed by version and target, restored before the fetch, so the mirror serves each mise version once per repository.
 - `working_directory`, `cache`, `cache_key`, `cache_key_prefix`, `cache_save`, `cache_save_post`, `sha256`, `install` and `install_args` go to `jdx/mise-action` as they are. `cache_save_post` defaults to `true` here.
 - Without it, as in a fork's pull request, mise downloads from GitHub.
 - The token goes in the replacement URL's userinfo. mise sends it as HTTP Basic credentials and redacts it from its logs, and GitHub masks it as a secret.
