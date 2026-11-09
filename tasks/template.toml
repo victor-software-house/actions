@@ -177,14 +177,24 @@ if ! git diff --check; then
 fi
 # A piece's tasks can declare tools the locks do not hold yet, which the
 # pre-push lock check and a locked install reject. Lock exactly the tools that
-# check lists, in the profiles .miserc.toml loads, as the check runs whatever
-# MISE_ENV the shell exports; one run writes each of their locks. mise lock
-# takes the platforms from lockfile_platforms. The assignment fails the task
-# when the dry run fails, which a here-string alone would hide.
-pending=$(env -u MISE_ENV mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')
-read -ra missing <<<"$pending"
-if [ -n "$pending" ]; then
-  env -u MISE_ENV mise lock "${missing[@]}"
-fi
+# check lists, once per committed mise.<profile>.toml as the check runs, since
+# a dry run sees only the locks of the profiles MISE_ENV loads. The hooks
+# profile's lock is never written, and mise.local.toml is a machine's own.
+# mise lock takes the platforms from lockfile_platforms. The assignment fails
+# the task when the dry run fails, which a here-string alone would hide.
+shopt -s nullglob
+for config in mise.*.toml; do
+  profile=${config#mise.}
+  profile=${profile%.toml}
+  case $profile in
+    hooks | local | *.local) continue ;;
+  esac
+  pending=$(MISE_ENV=$profile mise lock --dry-run --json | yq -p json -o tsv '[.[].name] | unique')
+  read -ra missing <<<"$pending"
+  if [ -n "$pending" ]; then
+    MISE_ENV=$profile mise lock "${missing[@]}"
+  fi
+done
+shopt -u nullglob
 echo "Turned on ${on[*]}."
 '''
