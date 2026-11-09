@@ -60,6 +60,10 @@ on:
         description: Comma-separated mise profiles the Build and test job loads after ci, such as test
         type: string
         default: ""
+    secrets:
+      release-mirror-token:
+        description: The release mirror's password, the RELEASE_MIRROR_TOKEN organization secret; without it mise downloads from GitHub
+        required: false
 
 permissions:
   contents: read
@@ -255,14 +259,16 @@ jobs:
         if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 3
-        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
         with:
           version: ${{ inputs.mise-version }}
+          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
+          cache_save_post: "false"
           cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       - &remove-partial-toolchains
         name: Stop the first install and remove partly installed toolchains
@@ -300,14 +306,16 @@ jobs:
         id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
-        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
         with:
           version: ${{ inputs.mise-version }}
+          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
+          cache_save_post: "false"
           cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
       # A documentation-only pull request: the repository's tools without the
       # Rust toolchain, then the documentation checks it defines. The mise
@@ -316,11 +324,12 @@ jobs:
       - name: Install the tools without Rust
         if: needs.changes.outputs.build == 'false'
         timeout-minutes: 3
-        uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        uses: victor-software-house/actions/mise@db2ca6f38cfd6c2f2be44b9928c10e2b9f39e0b0 # feat/mise-binary-mirror, 2026-11-09
         env:
           MISE_DISABLE_TOOLS: rust
         with:
           version: ${{ inputs.mise-version }}
+          mirror-token: ${{ secrets.release-mirror-token }}
           working_directory: ${{ inputs.working-directory }}
           cache: false
       - name: Documentation checks

@@ -9,6 +9,9 @@ import rego.v1
 
 runs_mise(step) if startswith(object.get(step, "uses", ""), "jdx/mise-action@")
 
+# The organization's mise action runs jdx/mise-action inside it.
+runs_mise(step) if startswith(object.get(step, "uses", ""), "victor-software-house/actions/mise@")
+
 # Any step whose script names the word mise runs it, wherever it stands: after
 # a shell keyword, a wrapper and its flags, a quote, a backtick or a path. A
 # shell script cannot be parsed reliably here, so the rule errs toward finding:
