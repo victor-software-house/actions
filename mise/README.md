@@ -2,30 +2,33 @@
 
 Installs the locked mise tools and saves the tools cache.
 It sends github.com downloads through the organization's release mirror.
-Use it in place of `jdx/mise-action`, in a job that grants `id-token: write`:
+Use it in place of `jdx/mise-action`, with the mirror's `ci` login from the organization secret `RELEASE_MIRROR_CI_PASSWORD`:
 
 ```yaml
 permissions:
   contents: read
-  id-token: write
 steps:
   - uses: victor-software-house/actions/mise@<commit> # main, <date>
     with:
       version: 2026.11.5
+      mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 ```
+
+Without the password, a job that grants `id-token: write` exchanges its OIDC token for a session token instead.
 
 ## Downloads
 
-- The action requests the job's OIDC token for the mirror's address.
+- With `mirror-password`, mise sends the `ci` login to the mirror, and the job needs no OIDC token.
+  The mirror's edge rule admits that login from any runner.
+- Without it, the action requests the job's OIDC token for the mirror's address.
   It exchanges that token at the mirror's `POST /token` for a session token that lasts six hours.
-  No caller holds a mirror secret.
-- With the session token, mise fetches every github.com release asset from the mirror.
+- With the login or the session token, mise fetches every github.com release asset from the mirror.
   `mise.lock`'s checksums verify each file.
-- The session token goes in the replacement URL, which mise sends as HTTP Basic credentials.
+- The password or session token goes in the replacement URL, which mise sends as HTTP Basic credentials.
   mise redacts it from its logs, and the action masks it in every log.
-- Every later step of the job can read the session token through `MISE_URL_REPLACEMENTS`.
-  It opens only the mirror's downloads, and only until it expires.
-- A job without `id-token: write`, such as a fork's pull request, downloads from GitHub, and the action logs a notice.
+- Every later step of the job can read it through `MISE_URL_REPLACEMENTS`.
+  It opens only the mirror's downloads; a session token lasts only until it expires.
+- A job with neither, such as a fork's pull request, which gets no secrets, downloads from GitHub, and the action logs a notice.
   A failed exchange downloads from GitHub too, with a warning.
   uv and Python then come from Astral's own mirror.
 
@@ -50,6 +53,7 @@ A run on the default branch saves the cache that pull requests read.
 |:--|:--|:--|
 | `version` | required | The mise release to install |
 | `mirror-url` | `https://release-mirror.invalid` | The release mirror's address, and the OIDC token's audience |
+| `mirror-password` | empty | The `ci` login's password; empty exchanges the job's OIDC token instead |
 | `install` | `true` | `false` only sets mise up |
 | `install_args` | empty | Arguments for `mise install`, such as one job's tools |
 | `working_directory` | empty | The directory mise runs in |
