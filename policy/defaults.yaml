@@ -16,9 +16,16 @@ workflow_policy_defaults:
     # ready_for_review event after it are both pull_request events for one
     # number; the draft suffix keeps the draft run, which only skips, out of
     # the ready run's group, so it cannot cancel it.
+    # The third ending is the group of a workflow that also runs on
+    # merge_group: every merge queue entry shares one group per base branch, so
+    # a newer entry's run cancels the runs below it. The queue merges on the
+    # head entry's result alone, and that commit holds every entry below it.
+    # Outside the queue the same expression gives the pull request group,
+    # draft suffix included.
     endings:
       - "${{ github.event.pull_request.number || github.ref_name }}"
       - "${{ github.event.pull_request.number || github.ref_name }}${{ github.event.pull_request.draft && '-draft' || '' }}"
+      - "${{ github.event_name == 'merge_group' && format('queue-{0}', github.event.merge_group.base_ref) || format('{0}-{1}{2}', github.event_name, github.event.pull_request.number || github.ref_name, github.event.pull_request.draft && '-draft' || '') }}"
     # The cancel-in-progress values accepted: always, or for pull request runs
     # only, so every push to a branch such as main finishes its run.
     cancel_in_progress:
