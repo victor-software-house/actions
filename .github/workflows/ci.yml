@@ -28,17 +28,17 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      # The mise action exchanges the job's OIDC token for a release mirror
-      # session token.
-      id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The ci login takes mise's downloads through the release mirror with
+      # no OIDC token; a fork's pull request gets no secret and uses GitHub.
       - name: Install locked tools
         uses: ./mise
         with:
           version: 2026.11.5
+          mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
       - name: Verify
         run: mise run verify
