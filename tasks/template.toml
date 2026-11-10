@@ -49,10 +49,12 @@ if [ -z "$tag" ]; then
 fi
 template=$(mktemp -d)
 trap 'rm -rf "$template"' EXIT
-git clone --quiet --depth 1 --branch "$tag" "$src" "$template"
+# A shallow clone of an annotated tag warns that the tag is not a commit, so
+# the check reads mise.toml from a partial clone instead.
+git clone --quiet --filter=blob:none --no-checkout "$src" "$template"
 # The template pins the copier that renders it, so the check runs the version
 # each tag was tested with and pins none itself.
-copier=$(sed -n 's/^"pypi:copier" = "\(.*\)"$/\1/p' "$template/mise.toml")
+copier=$(git -C "$template" show "$tag:mise.toml" | sed -n 's/^"pypi:copier" = "\(.*\)"$/\1/p')
 if [ -z "$copier" ]; then
   echo "::error::Template $tag pins no copier in mise.toml."
   exit 1
