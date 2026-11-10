@@ -98,7 +98,7 @@ runs:
     # (the binary, SHASUMS256.txt, its signature and the packslip), after it
     # restores the tools cache, so a cache hit downloads nothing. It falls
     # back to GitHub with a warning when the mirror fails.
-    - uses: victor-software-house/mise-action@c9863afe435120b2e4d9494d8fbb2895739a7ea8 # v5.2.5.1
+    - uses: victor-software-house/mise-action@a8e00ff954888fde747320eba3fe65e6246d24ad # v5.2.7.1
       with:
         version: ${{ inputs.version }}
         working_directory: ${{ inputs.working_directory }}
