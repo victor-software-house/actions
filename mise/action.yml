@@ -10,8 +10,10 @@ inputs:
     description: The mise version to install
     required: true
   mirror-url:
-    description: The release mirror's address
-    default: https://release-mirror.invalid
+    description: >-
+      The release mirror's address, from an organization secret; empty
+      downloads from GitHub
+    default: ""
   mirror-password:
     description: >-
       The password of the mirror's ci login, from an organization secret;
@@ -69,9 +71,16 @@ runs:
         MIRROR_PASSWORD: ${{ inputs.mirror-password }}
       run: |
         mirror="${MIRROR_URL%/}"
-        case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
         session=""
-        if [ -n "$MIRROR_PASSWORD" ]; then
+        if [ -n "$mirror" ]; then
+          case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
+          # The address comes from a secret; keep it, and its host, out of the logs.
+          echo "::add-mask::$mirror"
+          echo "::add-mask::${mirror#*://}"
+        fi
+        if [ -z "$mirror" ]; then
+          echo "::notice::No mirror-url, so mise downloads from GitHub"
+        elif [ -n "$MIRROR_PASSWORD" ]; then
           echo "::add-mask::$MIRROR_PASSWORD"
           # The password goes into a URL and a JSON string unescaped too.
           case "$MIRROR_PASSWORD" in
