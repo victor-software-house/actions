@@ -669,9 +669,9 @@ jobs:
   # caller's concurrency group cancels the older run, and this job, running
   # always(), would report it as failed, which a re-run of the whole workflow
   # then clears. So a cancelled result passes only when a newer run of this
-  # workflow, for the same event, branch and head commit, was created before
-  # the first cancelled job ended: that run is the one that cancelled it, and
-  # it reports instead. A job cancelled by its own timeout with no such run,
+  # workflow, for the same event, branch and head commit, was created no
+  # later than the second the first cancelled job ended: that run is the one
+  # that cancelled it, and it reports instead. A job cancelled by its own timeout with no such run,
   # or a run cancelled with no newer run behind it, still fails. This job
   # does not read cancelled(): it starts after the jobs it needs end, and in
   # a run that its concurrency group had already cancelled, cancelled() still
@@ -721,7 +721,7 @@ jobs:
           fi
           read -r workflow sha event branch <<<"$run"
           if ! ended=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.conclusion == "cancelled") | .completed_at] | min // empty'); then
+            --jq '[.jobs[] | select(.conclusion == "cancelled" and .completed_at != null) | .completed_at] | min // empty'); then
             echo "A job was cancelled, and this run's jobs cannot be read."
             exit 1
           fi
@@ -734,7 +734,7 @@ jobs:
           # The branch name is compared here, never spliced into the jq program,
           # because a pull request's author chooses it.
           if ! branches=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$sha&event=$event&per_page=100" \
-            --jq ".workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID and .created_at < \"$ended\") | .head_branch"); then
+            --jq ".workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID and .created_at <= \"$ended\") | .head_branch"); then
             echo "A job was cancelled, and the runs for $sha cannot be listed."
             exit 1
           fi
