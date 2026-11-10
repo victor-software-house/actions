@@ -39,6 +39,7 @@ jobs:
         uses: ./mise
         with:
           version: 2026.11.5
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
           mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
       - name: Verify
         run: mise run verify
