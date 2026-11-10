@@ -12,6 +12,11 @@ inputs:
   mirror-url:
     description: The release mirror's address
     default: https://release-mirror.invalid
+  mirror-password:
+    description: >-
+      The password of the mirror's ci login, from an organization secret;
+      empty exchanges the job's OIDC token instead
+    default: ""
   install:
     description: Install the tools; "false" only sets mise up
     default: "true"
@@ -43,8 +48,10 @@ inputs:
 runs:
   using: composite
   steps:
-    # A job that grants id-token: write proves its identity to the mirror
-    # with an OIDC token for the mirror's address, which lasts five minutes,
+    # A job given the ci login's password sends it as the ci login and
+    # needs no OIDC token. Otherwise, a job that grants id-token: write
+    # proves its identity to the mirror with an OIDC token for the mirror's
+    # address, which lasts five minutes,
     # and gets a session token that lasts six hours in exchange. A job
     # without the permission, such as a fork's pull request, downloads from
     # GitHub, with Astral's own mirror for uv and Python. The session token
@@ -59,11 +66,19 @@ runs:
       shell: sh
       env:
         MIRROR_URL: ${{ inputs.mirror-url }}
+        MIRROR_PASSWORD: ${{ inputs.mirror-password }}
       run: |
         mirror="${MIRROR_URL%/}"
         case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
         session=""
-        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+        if [ -n "$MIRROR_PASSWORD" ]; then
+          echo "::add-mask::$MIRROR_PASSWORD"
+          # The password goes into a URL and a JSON string unescaped too.
+          case "$MIRROR_PASSWORD" in
+            *[!A-Za-z0-9._~-]*) echo "::warning::The ci login's password holds characters a URL cannot carry; mise downloads from GitHub" ;;
+            *) session="$MIRROR_PASSWORD"; echo "Downloads go through $mirror with the ci login" ;;
+          esac
+        elif [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
           echo "::notice::This job has no OIDC token, so mise downloads from GitHub; grant id-token: write to download through the release mirror"
         else
           oidc=$(printf 'header = "Authorization: bearer %s"\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" |
