@@ -2,7 +2,8 @@
 
 Installs the locked mise tools and saves the tools cache.
 It sends github.com downloads through the organization's release mirror.
-Use it in place of `jdx/mise-action`, with the mirror's `ci` login from the organization secret `RELEASE_MIRROR_CI_PASSWORD`:
+Use it in place of `jdx/mise-action`.
+The organization secrets `RELEASE_MIRROR_URL` and `RELEASE_MIRROR_CI_PASSWORD` hold the mirror's address and its `ci` login:
 
 ```yaml
 permissions:
@@ -11,6 +12,7 @@ steps:
   - uses: victor-software-house/actions/mise@<commit> # main, <date>
     with:
       version: 2026.11.5
+      mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
       mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 ```
 
@@ -28,7 +30,9 @@ Without the password, a job that grants `id-token: write` exchanges its OIDC tok
   mise redacts it from its logs, and the action masks it in every log.
 - Every later step of the job can read it through `MISE_URL_REPLACEMENTS`.
   It opens only the mirror's downloads; a session token lasts only until it expires.
-- A job with neither, such as a fork's pull request, which gets no secrets, downloads from GitHub, and the action logs a notice.
+- The action masks the mirror's address and host in every log, since it comes from a secret.
+- A job with neither credential, or with no `mirror-url`, downloads from GitHub, and the action logs a notice.
+  A fork's pull request gets no secrets, so it downloads from GitHub.
   A failed exchange downloads from GitHub too, with a warning.
   uv and Python then come from Astral's own mirror.
 
@@ -52,7 +56,7 @@ A run on the default branch saves the cache that pull requests read.
 | Input | Default | Effect |
 |:--|:--|:--|
 | `version` | required | The mise release to install |
-| `mirror-url` | `https://release-mirror.invalid` | The release mirror's address, and the OIDC token's audience |
+| `mirror-url` | empty | The release mirror's address, and the OIDC token's audience; empty downloads from GitHub |
 | `mirror-password` | empty | The `ci` login's password; empty exchanges the job's OIDC token instead |
 | `install` | `true` | `false` only sets mise up |
 | `install_args` | empty | Arguments for `mise install`, such as one job's tools |
