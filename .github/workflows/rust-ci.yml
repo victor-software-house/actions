@@ -669,11 +669,13 @@ jobs:
   # caller's concurrency group cancels the older run, and this job, running
   # always(), would report it as failed, which a re-run of the whole workflow
   # then clears. So a cancelled result passes only when a newer run of this
-  # workflow, for the same event, branch and head commit, exists to report
-  # instead. A job cancelled by its own timeout, or a run cancelled with no
-  # newer run behind it, still fails. This job does not read cancelled():
-  # it starts after the jobs it needs end, and in a run that its concurrency
-  # group had already cancelled, cancelled() still read false here.
+  # workflow, for the same event, branch and head commit, was created before
+  # the first cancelled job ended: that run is the one that cancelled it, and
+  # it reports instead. A job cancelled by its own timeout with no such run,
+  # or a run cancelled with no newer run behind it, still fails. This job
+  # does not read cancelled(): it starts after the jobs it needs end, and in
+  # a run that its concurrency group had already cancelled, cancelled() still
+  # read false here.
   #
   # `actions: read` is a caller contract: GitHub refuses to start a called
   # workflow whose job asks for a permission its caller withholds, so a caller
@@ -718,10 +720,21 @@ jobs:
             exit 1
           fi
           read -r workflow sha event branch <<<"$run"
+          if ! ended=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.conclusion == "cancelled") | .completed_at] | min // empty'); then
+            echo "A job was cancelled, and this run's jobs cannot be read."
+            exit 1
+          fi
+          # The time comes from the API and is checked before it goes into the
+          # jq program below.
+          if ! [[ "$ended" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+            echo "A job was cancelled, and when it ended cannot be read."
+            exit 1
+          fi
           # The branch name is compared here, never spliced into the jq program,
           # because a pull request's author chooses it.
           if ! branches=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$sha&event=$event&per_page=100" \
-            --jq ".workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID) | .head_branch"); then
+            --jq ".workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID and .created_at < \"$ended\") | .head_branch"); then
             echo "A job was cancelled, and the runs for $sha cannot be listed."
             exit 1
           fi
@@ -730,5 +743,5 @@ jobs:
             echo "A job was cancelled because a newer run for $sha replaced this one; it reports instead."
             exit 0
           fi
-          echo "A job was cancelled, and no newer run for $sha replaces this one."
+          echo "A job was cancelled, and no run for $sha created before $ended replaces this one."
           exit 1
