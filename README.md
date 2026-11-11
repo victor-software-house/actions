@@ -34,7 +34,7 @@ It sits on a merged `main` commit whose CI passed, and never moves.
 
 | Task | Checks |
 |:--|:--|
-| `lint:workflows` | `actionlint` over the workflows |
+| `lint:workflows` | `jactionlint` over the workflows |
 | `check:pins` | Every `uses:` names a full commit SHA with a version comment |
 | `check:catalog` | `tasks/rust.toml` matches ctl-core v0.6.28's catalog, apart from the changes [tasks/README.md](tasks/README.md#rust-catalog) lists |
 | `check:policy` | Every rule in `policy/` passes its tests, then the pins rule runs over this repository's workflows |

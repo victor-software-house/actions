@@ -1,0 +1,18 @@
+# jactionlint reads this file under actionlint's name. Without a profile it
+# applies its default profile and prints a note on every run.
+profile: default
+paths:
+  .github/workflows/rust-ci.yml:
+    ignore:
+      # Every step of these jobs sets its own timeout, and the longest takes
+      # the caller's timeout-minutes input. A job timeout would be that input
+      # plus the fixed steps, and GitHub expressions have no arithmetic.
+      - missing-timeout
+      # mise-action renders its cache_key input as a Handlebars template, so
+      # {{env.MISE_LOCK_HASH}} is meant for it, not for GitHub.
+      - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
+  mise/action.yml:
+    ignore:
+      # The step refuses a mirror-url holding any character outside
+      # A-Za-z0-9._~:/-, a newline included, before it writes GITHUB_ENV.
+      - 'untrusted input from the variable MIRROR_URL \(inputs\.mirror-url\) is written to \$GITHUB_ENV.+'
