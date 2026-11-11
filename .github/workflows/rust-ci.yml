@@ -60,11 +60,19 @@ on:
         description: Comma-separated mise profiles the Build and test job loads after ci, such as test
         type: string
         default: ""
+    secrets:
+      RELEASE_MIRROR_URL:
+        description: The release mirror's address; without it, tools download from GitHub
+        required: false
+      RELEASE_MIRROR_CI_PASSWORD:
+        description: The password of the mirror's ci login
+        required: false
 
-# `id-token: write` is a caller contract: the jobs that install tools exchange
-# the job's OIDC token for a release mirror session token, and GitHub refuses
-# to start a called workflow whose job asks for a permission its caller
-# withholds.
+# The caller passes the organization secrets RELEASE_MIRROR_URL and
+# RELEASE_MIRROR_CI_PASSWORD, and the jobs that install tools download through
+# the release mirror with the ci login. `id-token: write` is still a caller
+# contract until the mise action drops its OIDC exchange: GitHub refuses to
+# start a called workflow whose job asks for a permission its caller withholds.
 permissions:
   contents: read
 
@@ -261,11 +269,13 @@ jobs:
         if: needs.changes.outputs.build != 'false'
         continue-on-error: true
         timeout-minutes: 3
-        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
+        uses: victor-software-house/actions/mise@638e3ffe62f7067b66afd9e3c11ee619308cc51d # main, 2026-11-11
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
         with:
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
@@ -307,11 +317,13 @@ jobs:
         id: toolchain-retry
         if: steps.toolchain.outcome == 'failure'
         timeout-minutes: 5
-        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
+        uses: victor-software-house/actions/mise@638e3ffe62f7067b66afd9e3c11ee619308cc51d # main, 2026-11-11
         env:
           RUSTUP_DOWNLOAD_TIMEOUT: "30"
           MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
         with:
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: ${{ env.TOOLCHAIN_CACHE == 'true' || !inputs.cache-volume }}
@@ -324,10 +336,12 @@ jobs:
       - name: Install the tools without Rust
         if: needs.changes.outputs.build == 'false'
         timeout-minutes: 3
-        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
+        uses: victor-software-house/actions/mise@638e3ffe62f7067b66afd9e3c11ee619308cc51d # main, 2026-11-11
         env:
           MISE_DISABLE_TOOLS: rust
         with:
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           cache: false

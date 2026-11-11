@@ -17,14 +17,16 @@ jobs:
       contents: read
       id-token: write
     with:
-      mise-version: 2026.10.25
+      mise-version: 2026.10.25    secrets:
+      RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
+      RELEASE_MIRROR_CI_PASSWORD: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 ```
 
 - A pull request scans only its own commits, from its base to its head.
 - A scheduled or dispatched run scans the whole history.
   The pre-push hook scans only the commits it pushes, so the full scan runs here once a day.
 - The job installs gitleaks from the caller's `mise.dev.toml`, with `MISE_ENV=dev,hooks`.
-  `id-token: write` lets the [mise action](../mise/README.md) download it through the release mirror.
+  The mirror secrets let the [mise action](../mise/README.md) download it through the release mirror.
 - The install sets `MISE_LOCKED=1`, so mise takes the download URL and checksum from the caller's `mise.dev.lock` and writes no lock entries.
   A gitleaks entry missing for the platform of the `runner` input fails the job instead of slowing it.
   The default runner is linux-x64; a caller that picks a runner of another platform runs `mise lock --platform <os>-<arch>` for it.

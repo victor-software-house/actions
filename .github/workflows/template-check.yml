@@ -25,6 +25,8 @@
 #           .copier-answers.yml
 #           <each file the template renders>
 #       secrets:
+#         RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
+#         RELEASE_MIRROR_CI_PASSWORD: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 #         TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 #
 # The caller includes tasks/template.toml, whose template:check does the work,
@@ -62,14 +64,21 @@ on:
         type: string
         default: ""
     secrets:
+      RELEASE_MIRROR_URL:
+        description: The release mirror's address; without it, tools download from GitHub
+        required: false
+      RELEASE_MIRROR_CI_PASSWORD:
+        description: The password of the mirror's ci login
+        required: false
       TEMPLATES_APP_PRIVATE_KEY:
         description: The private key of the App that reads the template; its client id is the TEMPLATES_APP_CLIENT_ID variable
         required: true
 
-# `id-token: write` is a caller contract: the jobs that install tools exchange
-# the job's OIDC token for a release mirror session token, and GitHub refuses
-# to start a called workflow whose job asks for a permission its caller
-# withholds.
+# The caller passes the organization secrets RELEASE_MIRROR_URL and
+# RELEASE_MIRROR_CI_PASSWORD, and the jobs that install tools download through
+# the release mirror with the ci login. `id-token: write` is still a caller
+# contract until the mise action drops its OIDC exchange: GitHub refuses to
+# start a called workflow whose job asks for a permission its caller withholds.
 permissions:
   contents: read
 
@@ -204,8 +213,10 @@ jobs:
           repositories: ${{ steps.template.outputs.name }}
           permission-contents: read
       - name: Install mise
-        uses: victor-software-house/actions/mise@bec0eef3f53f77bb73dd3969c005417218524f8a # main, 2026-11-09
+        uses: victor-software-house/actions/mise@638e3ffe62f7067b66afd9e3c11ee619308cc51d # main, 2026-11-11
         with:
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
           version: ${{ inputs.mise-version }}
           working_directory: ${{ inputs.working-directory }}
           # The check needs only its own tools, not the repository's toolchain.
