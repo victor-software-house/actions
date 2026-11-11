@@ -17,7 +17,8 @@ jobs:
       pull-requests: read
     uses: victor-software-house/actions/.github/workflows/rust-ci.yml@<commit> # main, <date>
     with:
-      mise-version: 2026.10.25    secrets:
+      mise-version: 2026.10.25
+    secrets:
       RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
       RELEASE_MIRROR_CI_PASSWORD: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 ```

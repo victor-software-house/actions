@@ -17,7 +17,8 @@ jobs:
       contents: read
       id-token: write
     with:
-      mise-version: 2026.10.25    secrets:
+      mise-version: 2026.10.25
+    secrets:
       RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
       RELEASE_MIRROR_CI_PASSWORD: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 ```
