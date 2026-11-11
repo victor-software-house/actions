@@ -83,7 +83,10 @@ runs:
           fi
           field() { printf '%s' "$reply" | sed -n "s/.*\"$1\" *: *\"\([^\"]*\)\".*/\1/p"; }
           remote_url=$(field remote_url)
-          if [ -n "$remote_url" ]; then
+          # A partial answer would leave mbx a broken remote, so the remote
+          # backend needs the URL and all three credential values.
+          if [ -n "$remote_url" ] && [ -n "$(field access_key_id)" ] &&
+            [ -n "$(field secret_access_key)" ] && [ -n "$(field session_token)" ]; then
             for name in remote_url s3_endpoint namespace access_key_id secret_access_key session_token; do
               value=$(field "$name")
               [ -z "$value" ] || echo "::add-mask::$value"
