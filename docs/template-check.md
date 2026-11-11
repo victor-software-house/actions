@@ -6,7 +6,7 @@ It fails when the newest tag of the repository's Copier template would change th
 ## Caller
 
 The caller runs on pull requests, merge queue entries and daily.
-It grants `id-token: write` for the [mise action](../mise/README.md), and passes only the template-reader App's private key:
+It passes the release mirror's address and `ci` password for the [mise action](../mise/README.md), and the template-reader App's private key:
 
 ```yaml
 on:
@@ -23,8 +23,10 @@ jobs:
       id-token: write
       issues: write
     with:
-      mise-version: 2026.10.25
+      mise-version: 2026.11.6
     secrets:
+      RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
+      RELEASE_MIRROR_CI_PASSWORD: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
       TEMPLATES_APP_PRIVATE_KEY: ${{ secrets.TEMPLATES_APP_PRIVATE_KEY }}
 ```
 
