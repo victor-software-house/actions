@@ -11,7 +11,7 @@ permissions:
 steps:
   - uses: victor-software-house/actions/mise@<commit> # main, <date>
     with:
-      version: 2026.11.5
+      version: 2026.11.6
       mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
       mirror-password: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
 ```
