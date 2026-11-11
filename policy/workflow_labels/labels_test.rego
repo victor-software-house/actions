@@ -26,6 +26,12 @@ test_hosted_runner_needs_no_listing if {
 	denied(f.edited("    runs-on: ubuntu-latest", "    runs-on: macos-latest"), f.labels) == set()
 }
 
+# Ubuntu 26.04 is a standard hosted runner on both architectures.
+test_ubuntu_26_needs_no_listing if {
+	denied(f.edited("    runs-on: ubuntu-latest", "    runs-on: ubuntu-26.04"), f.labels) == set()
+	denied(f.edited("    runs-on: ubuntu-latest", "    runs-on: ubuntu-26.04-arm"), f.labels) == set()
+}
+
 # A larger hosted runner bills even on a public repository.
 test_larger_hosted_runner_fails if {
 	denied(f.edited("    runs-on: ubuntu-latest", "    runs-on: ubuntu-latest-8-cores"), f.labels) == {"job changes runs on ubuntu-latest-8-cores, which is not a GitHub-hosted runner and .github/actionlint.yaml does not list"}

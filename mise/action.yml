@@ -75,6 +75,14 @@ runs:
         mirror="${MIRROR_URL%/}"
         session=""
         user="ci"
+        # The address goes into GITHUB_ENV, so a value with any character
+        # outside a plain URL, a newline above all, is refused.
+        case "$mirror" in
+          *[!A-Za-z0-9._~:/-]*)
+            echo "::warning::The mirror-url input holds characters an address cannot carry; mise downloads from GitHub"
+            mirror=""
+            ;;
+        esac
         if [ -n "$mirror" ]; then
           case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
           # The address comes from a secret; keep it, and its host, out of the logs.
@@ -94,9 +102,11 @@ runs:
         elif [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
           echo "::notice::This job has no OIDC token, so mise downloads from GitHub; grant id-token: write to download through the release mirror"
         else
-          oidc=$(printf 'header = "Authorization: bearer %s"\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" |
-            curl -fsS --connect-timeout 5 --max-time 10 --retry 2 --retry-max-time 20 --config - "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$mirror" |
-            sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p')
+          # A failed request leaves the reply empty, and the job downloads
+          # from GitHub below.
+          answer=$(printf 'header = "Authorization: bearer %s"\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" |
+            curl -fsS --connect-timeout 5 --max-time 10 --retry 2 --retry-max-time 20 --config - "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$mirror") || answer=""
+          oidc=$(printf '%s' "$answer" | sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p')
           if [ -n "$oidc" ]; then
             echo "::add-mask::$oidc"
             # With a key, the OIDC token is the password of the ci.<key>

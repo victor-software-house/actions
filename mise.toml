@@ -10,7 +10,9 @@ lockfile_platforms = ["linux-x64", "macos-arm64"]
 locked = true
 
 [tools]
-actionlint = "1.7.12"
+# jactionlint, the maintained fork mise points actionlint users to; it knows
+# the Ubuntu 26.04 hosted runners.
+jactionlint = "2.5.0"
 # check:catalog reads the TOML catalogs as JSON.
 yq = "4.54.1"
 # check:docs-probes runs the catalog's check:docs, which reads cargo metadata

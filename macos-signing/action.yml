@@ -25,6 +25,9 @@ runs:
     # step of the caller's job sees them in its environment.
     - id: load
       uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5.0.1
+      with:
+        # The 1Password CLI the action installs; unset, it takes the newest.
+        version: 2.41.1
       env:
         OP_WORKLOAD_ID: ${{ inputs.workload-id }}
         OP_ENVIRONMENT_ID: ${{ inputs.environment-id }}

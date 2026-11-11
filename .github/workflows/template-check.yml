@@ -135,6 +135,8 @@ jobs:
   template:
     name: Template
     needs: changes
+    # mise installs the check's tools and copier renders the template once.
+    timeout-minutes: 15
     # A pull request from a fork gets no secrets and cannot read the template,
     # so the check is skipped there instead of failing. A draft pull request
     # runs no check; marking it ready starts the run.
