@@ -1,0 +1,114 @@
+name: mbx-cache
+description: >-
+  Set up mbx with the organization's remote cache: exchange the job's OIDC
+  token at the release mirror for R2 credentials scoped to this repository,
+  then run mr-boxington-action against that bucket
+author: victor-software-house
+
+inputs:
+  endpoint:
+    description: >-
+      The release mirror's address, from an organization secret; empty builds
+      with mbx's local store only
+    required: true
+  key:
+    description: >-
+      The key in the user name of a CI job's mirror login, from an
+      organization secret; it passes the mirror's edge rule and opens nothing
+      alone
+    default: ""
+  ttl-minutes:
+    description: >-
+      How long the credentials last, from 10 to 360; make it outlast the job,
+      since mbx cannot renew them
+    required: true
+  generation:
+    description: The cache generation; change it to start an empty namespace
+    default: v1
+  version:
+    description: The mbx release mr-boxington-action installs
+    default: "1.30.0"
+
+runs:
+  using: composite
+  steps:
+    # The job proves its identity with an OIDC token for the route's own URL,
+    # sent as the password of the ci.<key> login so the mirror's edge rule
+    # admits it. The Worker answers credentials for this repository's prefix,
+    # read-write only on a push to the default branch. Every value of the
+    # answer is masked before anything prints, and curl reads each credential
+    # from its config on stdin, so none appears in a process's arguments.
+    # Without an OIDC token, an endpoint or an answer, mbx builds locally.
+    - name: Get remote cache credentials
+      id: credentials
+      shell: bash
+      env:
+        ENDPOINT: ${{ inputs.endpoint }}
+        KEY: ${{ inputs.key }}
+        TTL: ${{ inputs.ttl-minutes }}
+        GENERATION: ${{ inputs.generation }}
+      run: |
+        set -euo pipefail
+        backend=local
+        endpoint="${ENDPOINT%/}"
+        if [ -n "$endpoint" ]; then
+          case "$endpoint" in *://*) ;; *) endpoint="https://$endpoint" ;; esac
+          echo "::add-mask::$endpoint"
+          echo "::add-mask::${endpoint#*://}"
+        fi
+        if [ -n "$KEY" ]; then
+          echo "::add-mask::$KEY"
+        fi
+        route="$endpoint/mbx/credentials"
+        if [ -z "$endpoint" ]; then
+          echo "::warning::No endpoint, so mbx builds with its local store only"
+        elif [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::warning::This job has no OIDC token, so mbx builds with its local store only; grant id-token: write to use the remote cache"
+        else
+          oidc=$(printf 'header = "Authorization: bearer %s"\n' "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" |
+            curl -fsS --connect-timeout 5 --max-time 10 --retry 2 --retry-max-time 20 --config - "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$route" |
+            sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p' || true)
+          reply=""
+          if [ -n "$oidc" ]; then
+            echo "::add-mask::$oidc"
+            if [ -n "$KEY" ]; then
+              credential=$(printf 'user = "ci.%s:%s"' "$KEY" "$oidc")
+            else
+              credential=$(printf 'header = "Authorization: Bearer %s"' "$oidc")
+            fi
+            body=$(printf '{"ttl_minutes": %s, "generation": "%s"}' "$TTL" "$GENERATION")
+            reply=$(printf '%s\n' "$credential" |
+              curl -fsS --connect-timeout 5 --max-time 10 --retry 2 --retry-max-time 20 --config - \
+                -X POST -H 'content-type: application/json' --data "$body" "$route" || true)
+          fi
+          field() { printf '%s' "$reply" | sed -n "s/.*\"$1\" *: *\"\([^\"]*\)\".*/\1/p"; }
+          remote_url=$(field remote_url)
+          if [ -n "$remote_url" ]; then
+            for name in remote_url s3_endpoint namespace access_key_id secret_access_key session_token; do
+              value=$(field "$name")
+              [ -z "$value" ] || echo "::add-mask::$value"
+            done
+            {
+              echo "AWS_ACCESS_KEY_ID=$(field access_key_id)"
+              echo "AWS_SECRET_ACCESS_KEY=$(field secret_access_key)"
+              echo "AWS_SESSION_TOKEN=$(field session_token)"
+              echo "MBX_REMOTE_URL=$remote_url"
+              echo "MBX_REMOTE_NAMESPACE=$(field namespace)"
+              echo "MBX_REMOTE_S3_ENDPOINT=$(field s3_endpoint)"
+              echo "MBX_REMOTE_S3_REGION=$(field s3_region)"
+              echo "MBX_REMOTE_MODE=$(field mode)"
+            } >>"$GITHUB_ENV"
+            backend=remote
+            echo "The remote cache is $(field mode) until $(field expires_at)"
+          else
+            echo "::warning::Could not get remote cache credentials; mbx builds with its local store only"
+          fi
+        fi
+        echo "backend=$backend" >>"$GITHUB_OUTPUT"
+
+    # With backend remote and no remote inputs, the action keeps the values
+    # exported above; it then runs mbx doctor.
+    - uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+      with:
+        backend: ${{ steps.credentials.outputs.backend }}
+        version: ${{ inputs.version }}

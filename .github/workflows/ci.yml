@@ -45,3 +45,29 @@ jobs:
           mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
       - name: Verify
         run: mise run verify
+
+  # Runs the mbx-cache action against the release mirror and prints mbx
+  # doctor: a pull request gets read-only credentials for this repository's
+  # prefix, and every value of the answer must be masked in the log.
+  mbx-cache:
+    if: ${{ !github.event.pull_request.draft }}
+    name: mbx cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # The action exchanges it for the remote cache's credentials.
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up mbx with the remote cache
+        uses: ./mbx-cache
+        with:
+          endpoint: ${{ secrets.RELEASE_MIRROR_URL }}
+          key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+          ttl-minutes: 10
+      - name: Show the remote cache
+        run: mbx doctor

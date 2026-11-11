@@ -8,6 +8,7 @@ Each piece lives here once, and every repository that uses it pins one commit.
 | Path | What it is | Docs |
 |:--|:--|:--|
 | `mise/` | An action that installs the locked mise tools through the release mirror, with the job's OIDC token | [mise](mise/README.md) |
+| `mbx-cache/` | An action that sets mbx up with the organization's remote cache, with credentials the release mirror signs for the job | [mbx-cache](mbx-cache/README.md) |
 | `macos-signing/` | Actions that load and remove the macOS signing identities | [macos-signing](macos-signing/README.md) |
 | `.github/workflows/rust-ci.yml` | A reusable workflow: Rust build, tests and checks behind one `Verify` job | [Rust CI](docs/rust-ci.md) |
 | `.github/workflows/template-check.yml` | A reusable workflow that fails when a newer template tag would change the repository | [Template check](docs/template-check.md) |
