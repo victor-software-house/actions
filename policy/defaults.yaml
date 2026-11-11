@@ -46,6 +46,8 @@ workflow_policy_defaults:
       - ubuntu-slim
       - macos-latest
       - macos-26
+      # GitHub serves macOS 27 only as this preview image so far.
+      - xcode-27
       - macos-15
       - macos-14
       - windows-latest

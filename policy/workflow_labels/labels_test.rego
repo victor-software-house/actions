@@ -43,3 +43,8 @@ test_runs_on_object_labels_are_checked if {
 	denied(f.edited("    runs-on: nscloud-ubuntu-24.04-amd64-2x4", "    runs-on:\n      group: builders\n      labels: [nscloud-ubuntu-24.04-amd64-2x8]"), f.labels) == {"job build runs on nscloud-ubuntu-24.04-amd64-2x8, which is not a GitHub-hosted runner and .github/actionlint.yaml does not list"}
 	count(denied(f.edited("    runs-on: nscloud-ubuntu-24.04-amd64-2x4", "    runs-on:\n      group: builders"), f.labels)) == 0
 }
+
+# macOS 27 is the xcode-27 preview image, a standard hosted runner.
+test_xcode_27_needs_no_listing if {
+	denied(f.edited("    runs-on: ubuntu-latest", "    runs-on: xcode-27"), f.labels) == set()
+}
