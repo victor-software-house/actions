@@ -14,10 +14,11 @@ inputs:
       The release mirror's address, from an organization secret; empty
       downloads from GitHub
     default: ""
-  mirror-password:
+  mirror-key:
     description: >-
-      The password of the mirror's ci login, from an organization secret;
-      empty exchanges the job's OIDC token instead
+      The key in the user name of a CI job's mirror login, from an
+      organization secret. It passes the mirror's edge rule and opens nothing
+      alone; empty sends the exchange and the downloads without it
     default: ""
   install:
     description: Install the tools; "false" only sets mise up
@@ -50,15 +51,16 @@ inputs:
 runs:
   using: composite
   steps:
-    # A job given the ci login's password sends it as the ci login and
-    # needs no OIDC token. Otherwise, a job that grants id-token: write
-    # proves its identity to the mirror with an OIDC token for the mirror's
-    # address, which lasts five minutes,
+    # A job that grants id-token: write proves its identity to the mirror
+    # with an OIDC token for the mirror's address, which lasts five minutes,
     # and gets a session token that lasts six hours in exchange. A job
     # without the permission, such as a fork's pull request, downloads from
-    # GitHub, with Astral's own mirror for uv and Python. The session token
-    # goes in the replacement URL's userinfo, which mise sends as HTTP Basic
-    # credentials and redacts from its logs; the step masks it in every log.
+    # GitHub, with Astral's own mirror for uv and Python.
+    # With mirror-key, the exchange and every download carry the user name
+    # ci.<key>, which the mirror's edge rule admits; the key opens nothing
+    # without the session token. The login goes in the replacement URL's
+    # userinfo, which mise sends as HTTP Basic credentials and redacts from
+    # its logs; the step masks the key and the token in every log.
     # curl reads each credential from its config on stdin, so none appears in
     # a process's arguments.
     # curl starts no retry after 20 seconds and stops any attempt after 10,
@@ -68,25 +70,27 @@ runs:
       shell: sh
       env:
         MIRROR_URL: ${{ inputs.mirror-url }}
-        MIRROR_PASSWORD: ${{ inputs.mirror-password }}
+        MIRROR_KEY: ${{ inputs.mirror-key }}
       run: |
         mirror="${MIRROR_URL%/}"
         session=""
+        user="ci"
         if [ -n "$mirror" ]; then
           case "$mirror" in *://*) ;; *) mirror="https://$mirror" ;; esac
           # The address comes from a secret; keep it, and its host, out of the logs.
           echo "::add-mask::$mirror"
           echo "::add-mask::${mirror#*://}"
         fi
+        if [ -n "$MIRROR_KEY" ]; then
+          echo "::add-mask::$MIRROR_KEY"
+          # The key goes into a URL and a JSON string unescaped.
+          case "$MIRROR_KEY" in
+            *[!A-Za-z0-9_~-]*) echo "::warning::The mirror key holds characters a user name cannot carry; the job sends no key" ;;
+            *) user="ci.$MIRROR_KEY" ;;
+          esac
+        fi
         if [ -z "$mirror" ]; then
           echo "::notice::No mirror-url, so mise downloads from GitHub"
-        elif [ -n "$MIRROR_PASSWORD" ]; then
-          echo "::add-mask::$MIRROR_PASSWORD"
-          # The password goes into a URL and a JSON string unescaped too.
-          case "$MIRROR_PASSWORD" in
-            *[!A-Za-z0-9._~-]*) echo "::warning::The ci login's password holds characters a URL cannot carry; mise downloads from GitHub" ;;
-            *) session="$MIRROR_PASSWORD"; echo "Downloads go through $mirror with the ci login" ;;
-          esac
         elif [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
           echo "::notice::This job has no OIDC token, so mise downloads from GitHub; grant id-token: write to download through the release mirror"
         else
@@ -95,7 +99,14 @@ runs:
             sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p')
           if [ -n "$oidc" ]; then
             echo "::add-mask::$oidc"
-            reply=$(printf 'header = "Authorization: Bearer %s"\n' "$oidc" |
+            # With a key, the OIDC token is the password of the ci.<key>
+            # login; without one, it is a Bearer token.
+            if [ "$user" = ci ]; then
+              credential=$(printf 'header = "Authorization: Bearer %s"\n' "$oidc")
+            else
+              credential=$(printf 'user = "%s:%s"\n' "$user" "$oidc")
+            fi
+            reply=$(printf '%s\n' "$credential" |
               curl -fsS --connect-timeout 5 --max-time 10 --retry 2 --retry-max-time 20 --config - -X POST "$mirror/token" || true)
             session=$(printf '%s' "$reply" | sed -n 's/.*"token" *: *"\([^"]*\)".*/\1/p')
             expires=$(printf '%s' "$reply" | sed -n 's/.*"expires_at" *: *"\([^"]*\)".*/\1/p')
@@ -113,7 +124,7 @@ runs:
           fi
         fi
         if [ -n "$session" ]; then
-          echo "MISE_URL_REPLACEMENTS={\"https://github.com/\": \"${mirror%%://*}://ci:$session@${mirror#*://}/\"}" >>"$GITHUB_ENV"
+          echo "MISE_URL_REPLACEMENTS={\"https://github.com/\": \"${mirror%%://*}://$user:$session@${mirror#*://}/\"}" >>"$GITHUB_ENV"
         else
           echo 'MISE_URL_REPLACEMENTS={"https://github.com/astral-sh/": "https://releases.astral.sh/github/"}' >>"$GITHUB_ENV"
         fi

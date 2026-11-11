@@ -20,16 +20,16 @@ jobs:
       mise-version: 2026.11.6
     secrets:
       RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
-      RELEASE_MIRROR_CI_PASSWORD: ${{ secrets.RELEASE_MIRROR_CI_PASSWORD }}
+      RELEASE_MIRROR_CI_KEY: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
 ```
 
 A reusable workflow gets no permission its caller withholds:
 
 - `Changes` and `Static checks` read the pull request.
 - `Verify` reads the run and its newer runs, with `actions: read`.
-- The jobs that install tools ask for `id-token: write`, the mise action's fallback until it drops the OIDC exchange.
+- The jobs that install tools ask for `id-token: write`, which the mise action needs for its session token.
 
-The caller passes the organization secrets `RELEASE_MIRROR_URL` and `RELEASE_MIRROR_CI_PASSWORD`, so those jobs download through the release mirror with the `ci` login.
+The caller passes the organization secrets `RELEASE_MIRROR_URL` and `RELEASE_MIRROR_CI_KEY`, so those jobs download through the release mirror with a session token.
 
 GitHub refuses to start the workflow when the caller withholds one of them.
 So a caller grants `actions: read` and `id-token: write` in the same change that moves its pin to a commit whose jobs ask for them.
