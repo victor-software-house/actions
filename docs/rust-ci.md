@@ -27,12 +27,12 @@ A reusable workflow gets no permission its caller withholds:
 
 - `Changes` and `Static checks` read the pull request.
 - `Verify` reads the run and its newer runs, with `actions: read`.
-- The jobs that install tools ask for `id-token: write`, which the mise action needs for its session token.
+- The jobs that install tools need `id-token: write`, which the mise action exchanges for its session token.
 
 The caller passes the organization secrets `RELEASE_MIRROR_URL` and `RELEASE_MIRROR_CI_KEY`, so those jobs download through the release mirror with a session token.
 
 GitHub refuses to start the workflow when the caller withholds one of them.
-So a caller grants `actions: read` and `id-token: write` in the same change that moves its pin to a commit whose jobs ask for them.
+So a caller grants `actions: read` and `id-token: write` in the same change that moves its pin to a commit whose jobs need them.
 
 With `id-token: write`, every step of those jobs can request an OIDC token for any audience.
 That includes the pull request's build scripts and tests.

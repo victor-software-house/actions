@@ -16,7 +16,7 @@ steps:
       ttl-minutes: 120
 ```
 
-## What it does
+## Steps
 
 1. It requests the job's OIDC token for `<endpoint>/mbx/credentials` and posts it there.
    With `key`, it sends the token as the password of the user name `ci.<key>`, which the mirror's edge rule admits.
@@ -29,7 +29,8 @@ A job with no OIDC token, an empty `endpoint`, or no answer from the mirror gets
 A fork's pull request gets neither secret nor OIDC token, so it builds locally.
 
 The credentials cannot be renewed, so `ttl-minutes` must outlast the job.
-mbx reads only `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`, so the action replaces any AWS credentials an earlier step set; run it after the job's AWS steps, or in a job of its own.
+mbx reads only `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`, so the action replaces any AWS credentials an earlier step set.
+Run it after the job's AWS steps, or in a job of its own.
 Every later step of the job can read them; they reach only the repository's own prefix and expire.
 
 ## Inputs

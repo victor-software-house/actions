@@ -23,8 +23,11 @@ Each job skips drafts with `if: ${{ !github.event.pull_request.draft }}`, or nee
 
 A workflow on `pull_request` groups runs by `${{ github.event.pull_request.number || github.ref_name }}`.
 The group may end with `${{ github.event.pull_request.draft && '-draft' || '' }}`, so a draft run never cancels the ready one.
-A workflow that also runs on `merge_group` may end its group with the queue expression, which gives every merge queue entry one group per base branch, so a newer entry cancels the runs below it.
+
+A workflow that also runs on `merge_group` may end its group with the queue expression.
+That expression gives every merge queue entry one group per base branch, so a newer entry cancels the runs below it.
 The queue merges on the head entry's result alone, and that commit holds every entry below it.
+
 Outside the queue the expression gives the pull request group.
 It cancels the run a new push replaces, always or for pull request runs only.
 
