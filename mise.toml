@@ -1,11 +1,20 @@
+# The latest stable mise is the floor; CI pins the same version.
 min_version = "2026.11.6"
 
 [settings]
+# Every tool, whether a config file, a task or the command line asks for it,
+# comes from the locks; one with no entry fails instead of being looked up.
+locked = true
+# mise loads git:: task includes, and runs [deps] providers, only in
+# experimental mode.
+experimental = true
 lockfile = true
-# The platforms CI and contributors use.
+# The platforms CI and contributors use, from the platforms answer. Without
+# it, mise install fills every tool up to the platforms any tool already
+# records, and rewrites the locks.
 lockfile_platforms = ["linux-x64", "macos-arm64"]
 
-# Every tool must match mise.lock.
+# Every tool this root declares must match mise.lock or mise.<env>.lock.
 [tool_config]
 locked = true
 
@@ -23,10 +32,19 @@ jq = "1.8.2"
 # check:policy runs the tests of the workflow policy in policy/.
 conftest = "0.71.1"
 
-# mise-tasks/ holds this repository's own checks, named by their paths.
+# mise-tasks/ holds this repository's task fragments and file tasks. An
+# includes list replaces the default task dirs, so mise-tasks comes first; add
+# pinned git:: catalogs after it.
 [task_config]
-includes = ["mise-tasks"]
+includes = [
+  # Pinned git:: catalogs follow mise-tasks.
+  "mise-tasks",
+  # template:check, template:off, and template:on, at actions main, 2026-11-11.
+  "git::https://github.com/victor-software-house/actions.git//tasks/template.toml?ref=bead5c01b61e14ecf1e923a5bcff97e8c421f151",
+]
 
+# check:repo runs the template's shared checks and check:local, which lists
+# this repository's own.
 [tasks.verify]
 description = "Every check CI runs"
-depends = ["lint:workflows", "check:catalog", "check:docs-probes", "check:runners", "check:policy", "check:render"]
+depends = ["check:repo"]

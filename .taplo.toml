@@ -1,0 +1,3 @@
+# TOML formatting, checked by `mise run format:toml`.
+# The Copier template owns the layout of the files it renders.
+exclude = [".miserc.toml", "committed.toml", "mise.dev.toml"]

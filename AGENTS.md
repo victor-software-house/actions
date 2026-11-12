@@ -1,6 +1,6 @@
 # actions
 
-`README.md` indexes the pieces. Each piece's doc sits beside it, or under
+`README.md` indexes the pieces. Each piece's doc is beside it, or under
 `docs/` for a reusable workflow: what it does, its inputs, and how a
 repository calls it. A change to a piece updates its doc in the same change.
 
