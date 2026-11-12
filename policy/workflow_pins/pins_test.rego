@@ -37,3 +37,28 @@ test_missing_text_fails if {
 		with data.conftest.file as f.file
 		with data.workflow_texts as {}
 }
+
+# A composite action reads its file the same way, under the name action.yml.
+composite := `name: Setup
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+`
+
+composite_denied(text) := result if {
+	result := workflow_pins.deny_pins with input as f.lines(text)
+		with data.conftest.file as {"name": "action.yml", "dir": "mise"}
+		with data.workflow_texts as {"action.yml": text}
+}
+
+test_composite_pinned_passes if count(composite_denied(composite)) == 0
+
+test_composite_tag_fails if {
+	composite_denied(replace(composite, "@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1", "@v7")) == {"line 5: uses actions/checkout@v7 must pin a commit SHA and name its release in a comment, such as @<sha> # v1.2.3"}
+}
+
+# A local path in a composite action resolves against the caller's checkout.
+test_composite_local_path_fails if {
+	composite_denied(replace(composite, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1", "./setup")) == {"line 5: uses ./setup must pin a commit SHA and name its release in a comment, such as @<sha> # v1.2.3"}
+}

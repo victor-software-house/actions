@@ -14,9 +14,17 @@ finding contains {"msg": msg} if {
 	match := regex.find_all_string_submatch_n(`^\s*(?:-\s+)?uses:\s*(.+)$`, line.text, 1)
 	count(match) == 1
 	ref := trim_space(match[0][1])
-	not startswith(ref, "./")
+	not local_in_workflow(ref)
 	not regex.match(pinned, ref)
 	msg := sprintf("line %d: uses %s must pin a commit SHA and name its release in a comment, such as @<sha> # v1.2.3", [line.number, ref])
+}
+
+# A workflow runs a local path from its own checkout, so the path needs no
+# pin. A composite action has `runs` and no `jobs`: there a local path
+# resolves against the caller's checkout, so it must pin like any other.
+local_in_workflow(ref) if {
+	startswith(ref, "./")
+	lib.workflow.jobs
 }
 
 deny_pins contains msg if some msg in lib.denied("pins", finding)
