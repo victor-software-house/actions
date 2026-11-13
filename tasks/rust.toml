@@ -127,7 +127,7 @@ while read -r name version; do
   fi
 done <<<"$locked"
 
-if [ "${#specs[@]}" -eq 0 ]; then
+if [ -z "${specs[*]-}" ]; then
   echo "No locked crate is owned by: $CARGO_TRUSTED_OWNERS"
   exit 0
 fi
