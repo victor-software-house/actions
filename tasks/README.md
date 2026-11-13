@@ -36,6 +36,7 @@ It composes `verify` from the tasks it runs, beside its own `check:features` and
 | `lint`, `test`, `test:doc` | With `--workspace`, so every member of a workspace is checked |
 | `doc` | `cargo +$RUST_NIGHTLY doc --no-deps --all-features --locked`, with `RUSTDOCFLAGS="--cfg docsrs -D warnings"` |
 | `check:docs` | The docs standard below, for a repository that publishes |
+| `update:own` | `cargo update` of the locked crates that `CARGO_TRUSTED_OWNERS` publish, past the publish-age cooldown; see below |
 | `check:versions` | Fails when a manifest version changed outside a Version PR |
 | `semver` | `mise run ver semver`, at the release type the pending fragments allow |
 | `check:toolchain`, `deny`, `deny:advisories`, `deps` | As in ctl-core's catalog |
@@ -46,7 +47,7 @@ It composes `verify` from the tasks it runs, beside its own `check:features` and
 
 - `format` and its `RUSTFMT_TOOLCHAIN`;
 - the `test` command without `--lib`;
-- the added `doc` and `check:docs`;
+- the added `doc`, `check:docs` and `update:own`;
 - the guard in `check:versions`.
 
 ### doc
@@ -69,6 +70,23 @@ So it checks every gated item docs.rs could render.
 - A `[lints]` key fails for either `missing_*_doc` lint at any level, and for `pedantic` at `allow`.
 
 It runs `cargo metadata`, `jq` and `git grep`, so the repository pins `jq`.
+
+### update:own
+
+Rust 1.100's resolver skips a version newer than the publish-age cooldown, unless `Cargo.lock` already holds it.
+The including repository sets the cooldown with `CARGO_REGISTRY_GLOBAL_MIN_PUBLISH_AGE`.
+Cargo has no exemption for one crate, only for a registry.
+Crates our own accounts publish are trusted, so `update:own` updates exactly those past the cooldown.
+
+- `CARGO_TRUSTED_OWNERS` is a space-separated list of crates.io user logins.
+  The task fails when it is unset or empty, and when crates.io has no user with a listed login.
+- It lists each login's crates through the crates.io API, and intersects them with the registry crates in `Cargo.lock`.
+- It runs one `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update` for the crates in the intersection.
+  Each is named as `-p <name>@<version>`, since cargo rejects a bare name that the lock holds in two versions.
+- It exits 0 with a notice when no locked crate is owned by those logins.
+
+It reads crates.io and writes `Cargo.lock`, so it belongs in no `verify` list.
+Run it by hand.
 
 ### check:versions and semver
 
