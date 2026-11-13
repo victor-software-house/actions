@@ -89,8 +89,10 @@ run = [
 # per registry. Crates our own accounts publish are trusted, so this task
 # updates exactly those past the cooldown, with
 # CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow. CARGO_TRUSTED_OWNERS is a
-# space-separated list of crates.io user logins. Run it by hand: it reads
-# crates.io and writes Cargo.lock, so no verify list holds it.
+# space-separated list of crates.io user logins. The allow setting covers the
+# whole resolve, so the task fails and restores Cargo.lock when the update
+# adds or changes any crate that is not an owned one from crates.io. Run it by
+# hand: it reads crates.io and writes Cargo.lock, so no verify list holds it.
 ["update:own"]
 description = "Update the crates our crates.io owners publish, past the publish-age cooldown (network)"
 shell = "bash -o pipefail -c"
@@ -118,13 +120,32 @@ owned=$(
   done | sort -u
 )
 
+# The packages of Cargo.lock as "name version source", read from the lock
+# itself: cargo metadata leaves out a package that only a feature off by
+# default pulls in. A package with no source is a path crate.
+manifest=$(cargo locate-project --workspace --message-format plain)
+lock=$(dirname "$manifest")/Cargo.lock
+[ -f "$lock" ] || { echo "✘ $lock not found" >&2; exit 1; }
+snapshot() {
+  awk '
+    function flush() { if (name != "") print name, version, (source == "" ? "path" : source); name = ""; version = ""; source = "" }
+    /^\[/ { flush(); inpkg = ($0 == "[[package]]"); next }
+    inpkg && /^(name|version|source) = / { value = $3; gsub(/"/, "", value); if ($1 == "name") name = value; else if ($1 == "version") version = value; else source = value }
+    END { flush() }
+  ' "$lock" | sort -u
+}
+
 # Only crates.io's own index counts: a same-named crate from another registry
 # is not ours. name@version, since cargo update -p rejects a bare name that the
 # lock holds twice.
-locked=$(cargo metadata --locked --format-version 1 | jq -r '.packages[] | select(.source == "registry+https://github.com/rust-lang/crates.io-index" or .source == "sparse+https://index.crates.io/") | "\(.name) \(.version)"' | sort -u)
+locked=$(snapshot)
 specs=()
-while read -r name version; do
+while read -r name version source; do
   [ -n "$name" ] || continue
+  case $source in
+    registry+https://github.com/rust-lang/crates.io-index | sparse+https://index.crates.io/) ;;
+    *) continue ;;
+  esac
   if grep -qxF -- "$name" <<<"$owned"; then
     specs+=(-p "$name@$version")
   fi
@@ -134,8 +155,48 @@ if [ -z "${specs[*]-}" ]; then
   echo "No locked crate is owned by: $CARGO_TRUSTED_OWNERS"
   exit 0
 fi
+
+# The allow setting covers the whole resolve, so a new release of an owned
+# crate can pull a fresh crate that is not ours past the cooldown. Compare the
+# locked packages before and after: only an owned crate from crates.io may be
+# added or change version, and any other change restores Cargo.lock.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+cp "$lock" "$work/Cargo.lock"
+printf '%s\n' "$owned" >"$work/owned"
+snapshot >"$work/before"
+
 echo "Updating past the cooldown: ${specs[*]//-p /}"
 CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update "${specs[@]}"
+
+snapshot >"$work/after"
+comm -23 "$work/before" "$work/after" >"$work/removed"
+comm -13 "$work/before" "$work/after" >"$work/added"
+awk '
+  FNR == NR { owned[$1] = 1; next }
+  !($1 in owned) || ($3 != "registry+https://github.com/rust-lang/crates.io-index" && $3 != "sparse+https://index.crates.io/") { print "  " $1 " " $2 }
+' "$work/owned" "$work/added" >"$work/untrusted"
+if [ -s "$work/untrusted" ]; then
+  cp "$work/Cargo.lock" "$lock"
+  {
+    echo "✘ the update added or changed crates that are not ours, past the cooldown, so Cargo.lock is restored:"
+    cat "$work/untrusted"
+    echo "Wait for the cooldown, or update them deliberately with CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update -p <crate> --precise <version> after review."
+  } >&2
+  exit 1
+fi
+
+awk '
+  FNR == NR { old[$1] = old[$1] (old[$1] == "" ? "" : ",") $2; next }
+  { new[$1] = new[$1] (new[$1] == "" ? "" : ",") $2 }
+  END { for (name in new) print name " " (name in old ? old[name] : "(new)") " → " new[name] }
+' "$work/removed" "$work/added" | sort >"$work/moved"
+if [ -s "$work/moved" ]; then
+  echo "Updated:"
+  sed 's/^/  /' "$work/moved"
+else
+  echo "No owned crate moved."
+fi
 '''
 
 # A manifest version changes only on the Version PR, through a fragment.
