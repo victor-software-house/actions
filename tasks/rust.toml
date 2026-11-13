@@ -124,6 +124,7 @@ owned=$(
 locked=$(cargo metadata --locked --format-version 1 | jq -r '.packages[] | select(.source == "registry+https://github.com/rust-lang/crates.io-index" or .source == "sparse+https://index.crates.io/") | "\(.name) \(.version)"' | sort -u)
 specs=()
 while read -r name version; do
+  [ -n "$name" ] || continue
   if grep -qxF -- "$name" <<<"$owned"; then
     specs+=(-p "$name@$version")
   fi
