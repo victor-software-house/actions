@@ -102,7 +102,7 @@ test_exempt_parameter_changes_the_result if {
 	count(mise(hooks_env, {"mise_env": {"exempt": [{"file": "ci.yml", "profiles": ["dev,hooks"]}]}}).deny) == 0
 }
 
-other_runner := f.edited("    runs-on: ubuntu-latest", "    runs-on: corp-runner-large")
+other_runner := f.edited("    runs-on: ubuntu-26.04", "    runs-on: corp-runner-large")
 
 labels_deny(config) := d if {
 	d := workflow_labels.deny_labels with input as other_runner

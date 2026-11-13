@@ -60,7 +60,7 @@ A repository with issues turned off gets the notice only.
 |:--|:--|:--|
 | `mise-version` | required | The mise release to install |
 | `working-directory` | `.` | The directory the template renders into |
-| `runner` | `ubuntu-latest` | The final runner label for the check and its path filter |
+| `runner` | `ubuntu-26.04` | The final runner label for the check and its path filter |
 | `paths` | empty | The files the template renders, one glob per line, relative to `working-directory` |
 
 With `paths`, a pull request that changes none of those files skips the check:

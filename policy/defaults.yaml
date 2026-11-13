@@ -34,15 +34,11 @@ workflow_policy_defaults:
       - "${{ github.event_name != 'push' }}"
   labels:
     # GitHub's standard hosted runners. Larger runners bill even on public
-    # repositories, so they are not listed.
+    # repositories, so they are not listed. Ubuntu is 26.04 only:
+    # ubuntu-latest still means 24.04.
     hosted:
-      - ubuntu-latest
       - ubuntu-26.04
-      - ubuntu-24.04
-      - ubuntu-22.04
       - ubuntu-26.04-arm
-      - ubuntu-24.04-arm
-      - ubuntu-22.04-arm
       - ubuntu-slim
       - macos-latest
       - macos-26
@@ -54,6 +50,8 @@ workflow_policy_defaults:
       - windows-2025
       - windows-2022
       - windows-11-arm
+    # Ubuntu labels refused with a message that names ubuntu-26.04.
+    superseded: '^ubuntu-(latest|2[0-5]\.04)(-arm)?$'
     # Labels accepted beside the hosted ones and those .github/actionlint.yaml
     # lists.
     allowed: []

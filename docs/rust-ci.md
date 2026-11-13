@@ -166,9 +166,9 @@ The `Verify` check reports a result either way.
 | `advisories` | `true` | Runs `mise run deny:advisories` in `Static checks` |
 | `semver` | `false` | Runs `mise run semver` and `cargo package`, for a published crate |
 | `timeout-minutes` | `8` | Cancels a hung `Verify`, `Semver` or `Package` step |
-| `build-runner` | `["ubuntu-latest"]` | JSON array of build labels |
-| `read-only-runner` | `["ubuntu-latest"]` | JSON array of labels for builds that cannot commit cache state |
-| `light-runner` | `ubuntu-latest` | The label for light jobs |
+| `build-runner` | `["ubuntu-26.04"]` | JSON array of build labels |
+| `read-only-runner` | `["ubuntu-26.04"]` | JSON array of labels for builds that cannot commit cache state |
+| `light-runner` | `ubuntu-26.04` | The label for light jobs |
 | `cache-volume` | `false` | Uses the supplied persistent build cache volume |
 | `read-only-label` | empty | The safety label a persistent volume requires |
 | `cache-size-label` | empty | The capacity label present in both runner arrays |

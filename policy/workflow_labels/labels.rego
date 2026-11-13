@@ -51,6 +51,16 @@ finding contains {"msg": msg, "job": name} if {
 	some label in labels(job)
 	not label in accepted
 	not label in listed
+	regex.match(lib.param("labels", "superseded"), label)
+	msg := sprintf("job %s runs on %s; GitHub-hosted Ubuntu runners must be ubuntu-26.04 or ubuntu-26.04-arm", [name, label])
+}
+
+finding contains {"msg": msg, "job": name} if {
+	some name, job in lib.jobs
+	some label in labels(job)
+	not label in accepted
+	not label in listed
+	not regex.match(lib.param("labels", "superseded"), label)
 	msg := sprintf("job %s runs on %s, which is not a GitHub-hosted runner and .github/actionlint.yaml does not list", [name, label])
 }
 

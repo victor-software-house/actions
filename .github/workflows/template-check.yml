@@ -58,7 +58,7 @@ on:
       runner:
         description: Final runner label for the template check and its path filter
         type: string
-        default: ubuntu-latest
+        default: ubuntu-26.04
       paths:
         description: Newline-separated globs of the files the template renders; a pull request that changes none of them skips the check. Empty checks every pull request
         type: string
