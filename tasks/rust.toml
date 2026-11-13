@@ -120,17 +120,33 @@ owned=$(
   done | sort -u
 )
 
+# The packages of Cargo.lock as "name version source", read from the lock
+# itself: cargo metadata leaves out a package that only a feature off by
+# default pulls in. A package with no source is a path crate.
+lock=$(dirname "$(cargo locate-project --workspace --message-format plain)")/Cargo.lock
+snapshot() {
+  awk '
+    function flush() { if (name != "") print name, version, (source == "" ? "path" : source); name = ""; version = ""; source = "" }
+    /^\[/ { flush(); inpkg = ($0 == "[[package]]"); next }
+    inpkg && /^(name|version|source) = / { value = $3; gsub(/"/, "", value); if ($1 == "name") name = value; else if ($1 == "version") version = value; else source = value }
+    END { flush() }
+  ' "$lock" | sort -u
+}
+
 # Only crates.io's own index counts: a same-named crate from another registry
 # is not ours. name@version, since cargo update -p rejects a bare name that the
 # lock holds twice.
-locked=$(cargo metadata --locked --format-version 1 | jq -r '.packages[] | select(.source == "registry+https://github.com/rust-lang/crates.io-index" or .source == "sparse+https://index.crates.io/") | "\(.name) \(.version)"' | sort -u)
 specs=()
-while read -r name version; do
+while read -r name version source; do
   [ -n "$name" ] || continue
+  case $source in
+    registry+https://github.com/rust-lang/crates.io-index | sparse+https://index.crates.io/) ;;
+    *) continue ;;
+  esac
   if grep -qxF -- "$name" <<<"$owned"; then
     specs+=(-p "$name@$version")
   fi
-done <<<"$locked"
+done < <(snapshot)
 
 if [ -z "${specs[*]-}" ]; then
   echo "No locked crate is owned by: $CARGO_TRUSTED_OWNERS"
@@ -141,14 +157,10 @@ fi
 # crate can pull a fresh crate that is not ours past the cooldown. Compare the
 # locked packages before and after: only an owned crate from crates.io may be
 # added or change version, and any other change restores Cargo.lock.
-lock=$(dirname "$(cargo locate-project --workspace --message-format plain)")/Cargo.lock
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cp "$lock" "$work/Cargo.lock"
 printf '%s\n' "$owned" >"$work/owned"
-snapshot() {
-  cargo metadata --locked --format-version 1 | jq -r '.packages[] | "\(.name) \(.version) \(.source // "path")"' | sort -u
-}
 snapshot >"$work/before"
 
 echo "Updating past the cooldown: ${specs[*]//-p /}"
