@@ -15,9 +15,9 @@ experimental = true
 
 [env]
 # format runs on this toolchain when set, for rustfmt's unstable options.
-RUSTFMT_TOOLCHAIN = "+nightly-2026-09-29"
+RUSTFMT_TOOLCHAIN = "+nightly-2026-11-01"
 # doc builds on this nightly, as docs.rs does.
-RUST_NIGHTLY = "nightly-2026-09-29"
+RUST_NIGHTLY = "nightly-2026-11-01"
 
 [task_config]
 includes = [
