@@ -116,6 +116,7 @@ The workflow refuses a run that lacks this configuration.
 - A pull request, or a run on another branch, reads the volume and never commits it.
 - A last step keeps the volume under its size.
   After a passing build, `mbx gc` holds the store to a third of it, and `target/` is emptied once it passes half.
+  The same collection drops cached results for a compiler version unused for 14 days, so a toolchain bump does not leave the old compiler's results on the volume.
 
 Parallel jobs that commit one cache tag overwrite each other: the last write wins, with no merge step
 ([Cache Volumes](https://namespace.so/docs/architecture/storage/cache-volumes)).
