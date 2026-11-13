@@ -83,6 +83,61 @@ run = [
   "cargo-machete --with-metadata",
 ]
 
+# The resolver skips a version newer than the publish-age cooldown
+# (CARGO_REGISTRY_GLOBAL_MIN_PUBLISH_AGE, which the including repository sets)
+# unless Cargo.lock already holds it. Cargo has no exemption per crate, only
+# per registry. Crates our own accounts publish are trusted, so this task
+# updates exactly those past the cooldown, with
+# CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow. CARGO_TRUSTED_OWNERS is a
+# space-separated list of crates.io user logins. Run it by hand: it reads
+# crates.io and writes Cargo.lock, so no verify list holds it.
+["update:own"]
+description = "Update the crates our crates.io owners publish, past the publish-age cooldown (network)"
+shell = "bash -o pipefail -c"
+run = '''
+set -euo pipefail
+
+if [ -z "${CARGO_TRUSTED_OWNERS:-}" ] || [ -z "${CARGO_TRUSTED_OWNERS//[[:space:]]/}" ]; then
+  echo "✘ CARGO_TRUSTED_OWNERS is unset or empty: set it to the crates.io user logins whose crates are trusted, space-separated" >&2
+  exit 1
+fi
+
+api=https://crates.io/api/v1
+agent="victor-software-house/actions update:own"
+owned=$(
+  for login in $CARGO_TRUSTED_OWNERS; do
+    user=$(curl -fsS -A "$agent" "$api/users/$login") || { echo "✘ looking up crates.io user $login failed" >&2; exit 1; }
+    id=$(jq -er '.user.id' <<<"$user")
+    page=1
+    while :; do
+      crates=$(curl -fsS -A "$agent" "$api/crates?user_id=$id&per_page=100&page=$page") || { echo "✘ listing the crates of $login failed at page $page" >&2; exit 1; }
+      jq -r '.crates[].name' <<<"$crates"
+      [ "$(jq '.crates | length' <<<"$crates")" -ge 100 ] || break
+      page=$((page + 1))
+    done
+  done | sort -u
+)
+
+# Only crates.io's own index counts: a same-named crate from another registry
+# is not ours. name@version, since cargo update -p rejects a bare name that the
+# lock holds twice.
+locked=$(cargo metadata --locked --format-version 1 | jq -r '.packages[] | select(.source == "registry+https://github.com/rust-lang/crates.io-index" or .source == "sparse+https://index.crates.io/") | "\(.name) \(.version)"' | sort -u)
+specs=()
+while read -r name version; do
+  [ -n "$name" ] || continue
+  if grep -qxF -- "$name" <<<"$owned"; then
+    specs+=(-p "$name@$version")
+  fi
+done <<<"$locked"
+
+if [ -z "${specs[*]-}" ]; then
+  echo "No locked crate is owned by: $CARGO_TRUSTED_OWNERS"
+  exit 0
+fi
+echo "Updating past the cooldown: ${specs[*]//-p /}"
+CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update "${specs[@]}"
+'''
+
 # A manifest version changes only on the Version PR, through a fragment.
 # The release config is what declares releases, so a repository without one
 # has no version to compare, and needs neither the `ver` task nor verctl. A

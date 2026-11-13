@@ -27,7 +27,7 @@ yq = "4.54.1"
 # check:docs-probes runs the catalog's check:docs, which reads cargo metadata
 # with jq. Only cargo metadata --no-deps runs on the probe crates, so nothing
 # compiles here.
-rust = { version = "1.99.1", profile = "minimal" }
+rust = { version = "1.100.0", profile = "minimal" }
 jq = "1.8.2"
 # check:policy runs the tests of the workflow policy in policy/.
 conftest = "0.71.1"

@@ -518,7 +518,9 @@ jobs:
             find target -mindepth 1 -maxdepth 1 -exec rm -rf {} +
           fi
           if [ "$JOB_STATUS" = success ]; then
-            MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
+            # After a toolchain bump, cached results for a compiler version
+            # unused for 14 days leave the volume (mbx 1.28.0 gc.rustc_max_age).
+            MBX_GC_RUSTC_MAX_AGE=14d MBX_GC_MAX_TOTAL_SIZE="$((SIZE_GB / 3))GiB" mbx gc
           else
             echo "An earlier step failed, so mbx's store is left as it is."
           fi
