@@ -79,8 +79,8 @@ Cargo has no exemption for one crate, only for a registry.
 Crates our own accounts publish are trusted, so `update:own` updates exactly those past the cooldown.
 
 - `CARGO_TRUSTED_OWNERS` is a space-separated list of crates.io user logins.
-  The task fails when it is unset or empty, and when crates.io has no user with a listed login.
-- It lists each login's crates through the crates.io API, and intersects them with the registry crates in `Cargo.lock`.
+  The task fails when it is unset or empty, and when the crates.io lookup of a listed login fails, as it does for an unknown user.
+- It lists each login's crates through the crates.io API, and intersects them with the crates in `Cargo.lock` that come from crates.io, so a same-named crate from another registry stays out.
 - It runs one `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update` for the crates in the intersection.
   Each is named as `-p <name>@<version>`, since cargo rejects a bare name that the lock holds in two versions.
 - It exits 0 with a notice when no locked crate is owned by those logins.
