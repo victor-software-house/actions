@@ -52,7 +52,7 @@ test_status_function_overrides_the_skip if {
 }
 
 test_chain_of_needs_passes if {
-	chain := f.edited("    needs: changes", "    needs: changes\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n  build-two:\n    needs: changes")
+	chain := f.edited("    needs: changes", "    needs: changes\n  deploy:\n    needs: build\n    runs-on: ubuntu-26.04\n    steps:\n      - run: true\n  build-two:\n    needs: changes")
 	count(denied(chain)) == 0
 }
 
@@ -65,7 +65,7 @@ test_negated_gate_still_needs_the_skip if {
 }
 
 test_chain_without_a_skipper_fails if {
-	chain := f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n")
+	chain := f.edited("  changes:\n    if: ${{ !github.event.pull_request.draft }}\n", "  changes:\n  deploy:\n    needs: build\n    runs-on: ubuntu-26.04\n    steps:\n      - run: true\n")
 	denied(chain) == {
 		"job changes must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
 		"job build must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
@@ -75,7 +75,7 @@ test_chain_without_a_skipper_fails if {
 
 # build runs with always(), so deploy, which needs it, runs on drafts too.
 test_status_function_in_the_chain_stops_the_skip if {
-	chain := f.edited("    needs: changes", "    needs: changes\n    if: ${{ always() }}\n  deploy:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n  later:\n    needs: changes")
+	chain := f.edited("    needs: changes", "    needs: changes\n    if: ${{ always() }}\n  deploy:\n    needs: build\n    runs-on: ubuntu-26.04\n    steps:\n      - run: true\n  later:\n    needs: changes")
 	denied(chain) == {
 		"job build must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",
 		"job deploy must skip drafts with if: ${{ !github.event.pull_request.draft }}, or need a job that does",

@@ -11,7 +11,7 @@ yq -e '.on.workflow_call.inputs."build-runner".type == "string" and .on.workflow
 for file in .github/workflows/template-check.yml .github/workflows/secrets.yml; do
   yq -e '.on.workflow_call.inputs.runner.type == "string"' "$file" >/dev/null
 done
-yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-latest"' .github/workflows/rust-ci.yml >/dev/null
+yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-26.04"' .github/workflows/rust-ci.yml >/dev/null
 
 # Execute the guard the workflow actually ships, not a second implementation.
 guard=$(yq -r '.jobs.build.steps[0].run' .github/workflows/rust-ci.yml)

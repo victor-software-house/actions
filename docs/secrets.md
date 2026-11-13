@@ -40,4 +40,4 @@ jobs:
 |:--|:--|:--|
 | `mise-version` | required | The mise release to install |
 | `working-directory` | `.` | The directory that holds the caller's `mise.toml` |
-| `runner` | `ubuntu-latest` | The final runner label for the scan |
+| `runner` | `ubuntu-26.04` | The final runner label for the scan |

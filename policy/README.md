@@ -35,6 +35,8 @@ It cancels the run a new push replaces, always or for pull request runs only.
 
 Every `runs-on` label is a standard GitHub-hosted runner, or one `.github/actionlint.yaml` lists.
 So is every `runner` or `*-runner` input to a reusable workflow.
+Ubuntu is `ubuntu-26.04` or `ubuntu-26.04-arm`.
+`ubuntu-latest` still means 24.04, so it and every older Ubuntu label are refused, and the message names `ubuntu-26.04`.
 
 ### workflow_permissions
 
@@ -93,7 +95,7 @@ Every value a rule compares against is a parameter in `policy/defaults.yaml`, un
 
 - the draft types and condition;
 - the accepted concurrency group endings and `cancel-in-progress` values;
-- the hosted and other accepted runner labels;
+- the hosted and other accepted runner labels, and the Ubuntu labels refused by name;
 - the allowed top-level permission levels;
 - the pin pattern;
 - the accepted mise profiles, and the workflows exempt from them.

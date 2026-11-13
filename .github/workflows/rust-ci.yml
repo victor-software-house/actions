@@ -31,15 +31,15 @@ on:
       build-runner:
         description: JSON array of final build runner labels
         type: string
-        default: '["ubuntu-latest"]'
+        default: '["ubuntu-26.04"]'
       read-only-runner:
         description: JSON array of final labels for builds that must not commit cache state
         type: string
-        default: '["ubuntu-latest"]'
+        default: '["ubuntu-26.04"]'
       light-runner:
         description: Final runner label for lightweight jobs
         type: string
-        default: ubuntu-latest
+        default: ubuntu-26.04
       cache-volume:
         description: The supplied build labels mount a persistent cache volume
         type: boolean
