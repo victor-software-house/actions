@@ -101,6 +101,8 @@ Run it by hand.
 - They fail when `VERCTL_CONFIG` names no file.
 - `check:registry` needs verctl 0.8.6-rc.4 or later.
   On a pull request or a merge group it reads the release workflow's runs and the pull request's labels with `GITHUB_TOKEN`, so the caller grants `actions: read` and `pull-requests: read`.
+- It waits up to `VERCTL_RELEASE_WAIT` for a running release, so it belongs in no `verify` list.
+  The shared Rust CI runs it in its own `Release freeze` job, on every pull request and merge group.
 - A repository that declares releases includes verctl's `ver` task, which `check:versions` calls.
 - `semver` also runs through `ver`, so a published crate includes `ver` too.
   It fails when the release config is missing.

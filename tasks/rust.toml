@@ -227,7 +227,9 @@ mise run ver check versions
 # request or a merge group while the default branch holds a version whose
 # release is incomplete. On those events it needs GITHUB_TOKEN with
 # `actions: read` and `pull-requests: read`; on any other event the freeze is
-# a notice. A repository without a release config has nothing to check.
+# a notice. A repository without a release config has nothing to check. It
+# waits up to VERCTL_RELEASE_WAIT for a running release, so no verify list
+# holds it: the shared Rust CI runs it in its own job on the light runner.
 ["check:registry"]
 description = "Registry state and the release freeze (network)"
 run = '''
