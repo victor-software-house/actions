@@ -38,6 +38,7 @@ It composes `verify` from the tasks it runs, beside its own `check:features` and
 | `check:docs` | The docs standard below, for a repository that publishes |
 | `update:own` | `cargo update` of the locked crates that `CARGO_TRUSTED_OWNERS` publish, past the publish-age cooldown; see below |
 | `check:versions` | Fails when a manifest version changed outside a Version PR |
+| `check:registry` | `mise run ver check registry`: each crate's crates.io state, and the release freeze |
 | `semver` | `mise run ver semver`, at the release type the pending fragments allow |
 | `check:toolchain`, `deny`, `deny:advisories`, `deps` | As in ctl-core's catalog |
 
@@ -47,7 +48,7 @@ It composes `verify` from the tasks it runs, beside its own `check:features` and
 
 - `format` and its `RUSTFMT_TOOLCHAIN`;
 - the `test` command without `--lib`;
-- the added `doc`, `check:docs` and `update:own`;
+- the added `doc`, `check:docs`, `check:registry` and `update:own`;
 - the guard in `check:versions`.
 
 ### doc
@@ -84,8 +85,9 @@ Crates our own accounts publish are trusted, so `update:own` updates exactly tho
 - It runs one `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update` for the crates in the intersection.
   Each is named as `-p <name>@<version>`, since cargo rejects a bare name that the lock holds in two versions.
 - The allow setting covers the whole resolve, so a new release of an owned crate can pull a fresh crate we do not own past the cooldown.
-  The task records the packages of `Cargo.lock`, read from the file so a feature off by default hides none, before and after, and only an owned crate from crates.io may be added or change version.
-  Any other change restores `Cargo.lock` and fails the task, naming those crates with their new versions.
+- The task records the packages of `Cargo.lock` before and after, read from the file so a feature off by default hides none.
+  Only an owned crate from crates.io may be added or change version.
+- Any other change restores `Cargo.lock` and fails the task, naming those crates with their new versions.
   Wait for the cooldown, or update them deliberately with `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update -p <crate> --precise <version>` after review.
 - On success it prints each owned crate that moved, old version to new.
 - It exits 0 with a notice when no locked crate is owned by those logins.
@@ -93,10 +95,14 @@ Crates our own accounts publish are trusted, so `update:own` updates exactly tho
 It reads crates.io and writes `Cargo.lock`, so it belongs in no `verify` list.
 Run it by hand.
 
-### check:versions and semver
+### check:versions, check:registry and semver
 
-- `check:versions` passes with a notice when the repository has no `.ctl/ver.yaml` and `VERCTL_CONFIG` is unset.
-- It fails when `VERCTL_CONFIG` names no file.
+- `check:versions` and `check:registry` pass with a notice when the repository has no `.ctl/ver.yaml` and `VERCTL_CONFIG` is unset.
+- They fail when `VERCTL_CONFIG` names no file.
+- `check:registry` needs verctl 0.8.6-rc.4 or later.
+  On a pull request or a merge group it reads the release workflow's runs and the pull request's labels with `GITHUB_TOKEN`, so the caller grants `actions: read` and `pull-requests: read`.
+- It waits up to `VERCTL_RELEASE_WAIT` for a running release, so it belongs in no `verify` list.
+  The shared Rust CI runs it in its own `Release freeze` job, on every pull request and merge group.
 - A repository that declares releases includes verctl's `ver` task, which `check:versions` calls.
 - `semver` also runs through `ver`, so a published crate includes `ver` too.
   It fails when the release config is missing.

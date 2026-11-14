@@ -222,6 +222,29 @@ fi
 mise run ver check versions
 '''
 
+# Runs verctl's `registry` check, which needs verctl 0.8.6-rc.4 or later: each
+# crate's state on crates.io, and the release freeze, which fails a pull
+# request or a merge group while the default branch holds a version whose
+# release is incomplete. On those events it needs GITHUB_TOKEN with
+# `actions: read` and `pull-requests: read`; on any other event the freeze is
+# a notice. A repository without a release config has nothing to check. It
+# waits up to VERCTL_RELEASE_WAIT for a running release, so no verify list
+# holds it: the shared Rust CI runs it in its own job on the light runner.
+["check:registry"]
+description = "Registry state and the release freeze (network)"
+run = '''
+if [ -n "${VERCTL_CONFIG:-}" ] && [ ! -f "$VERCTL_CONFIG" ]; then
+  echo "VERCTL_CONFIG=$VERCTL_CONFIG names no file" >&2
+  exit 1
+fi
+config="${VERCTL_CONFIG:-.ctl/ver.yaml}"
+if [ ! -f "$config" ]; then
+  echo "no $config: this repository declares no releases, nothing to check"
+  exit 0
+fi
+mise run ver check registry
+'''
+
 # Published crates only. CI runs it before packaging; it compares against the
 # release on crates.io, at the release type the pending fragments allow, so a
 # break fails unless a fragment already bumps the minor. It runs verctl's
