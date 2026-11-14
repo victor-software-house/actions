@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 #MISE description="Shared workflows consume final infrastructure inputs without runtime visibility policy"
 set -euo pipefail
-workflows=(.github/workflows/rust-ci.yml .github/workflows/template-check.yml .github/workflows/secrets.yml)
+workflows=(.github/workflows/rust-ci.yml .github/workflows/bun-ci.yml .github/workflows/template-check.yml .github/workflows/secrets.yml)
 if grep -nE 'github\.event\.repository\.private|nscloud-(ubuntu|macos)|namespace-(4x8|8x16|16x32)|cheapest|needs\.runner' "${workflows[@]}"; then
   echo 'shared workflows must consume final caller configuration' >&2
   exit 1
 fi
-yq -e '.jobs.runner == null' .github/workflows/rust-ci.yml >/dev/null
-yq -e '.on.workflow_call.inputs."build-runner".type == "string" and .on.workflow_call.inputs.runner == null' .github/workflows/rust-ci.yml >/dev/null
+for file in .github/workflows/rust-ci.yml .github/workflows/bun-ci.yml; do
+  yq -e '.jobs.runner == null' "$file" >/dev/null
+  yq -e '.on.workflow_call.inputs."build-runner".type == "string" and .on.workflow_call.inputs.runner == null' "$file" >/dev/null
+  yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-26.04"' "$file" >/dev/null
+done
 for file in .github/workflows/template-check.yml .github/workflows/secrets.yml; do
   yq -e '.on.workflow_call.inputs.runner.type == "string"' "$file" >/dev/null
 done
-yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-26.04"' .github/workflows/rust-ci.yml >/dev/null
 
 # Execute the guard the workflow actually ships, not a second implementation.
 guard=$(yq -r '.jobs.build.steps[0].run' .github/workflows/rust-ci.yml)

@@ -1,0 +1,233 @@
+# The reusable Bun CI workflow accepts final runner labels from its caller.
+# Repository visibility, provider selection and machine sizes are resolved
+# when the caller is rendered, never when this workflow executes.
+# Only event-dependent behavior remains here: documentation-only checks and
+# whether a run may save the dependency cache.
+name: Bun CI
+
+on:
+  workflow_call:
+    inputs:
+      mise-version:
+        description: The mise release to install
+        type: string
+        required: true
+      working-directory:
+        description: The directory that holds the project's mise.toml and bun.lock
+        type: string
+        default: .
+      timeout-minutes:
+        description: Cancels a hung Verify step
+        type: number
+        default: 8
+      build-runner:
+        description: JSON array of final build runner labels
+        type: string
+        default: '["ubuntu-26.04"]'
+      light-runner:
+        description: Final runner label for lightweight jobs
+        type: string
+        default: ubuntu-26.04
+    secrets:
+      RELEASE_MIRROR_URL:
+        description: The release mirror's address; without it, tools download from GitHub
+        required: false
+      RELEASE_MIRROR_CI_KEY:
+        description: The key in the user name of a CI job's mirror login; it passes the mirror's edge rule and opens nothing alone
+        required: false
+
+# The caller passes the organization secrets RELEASE_MIRROR_URL and
+# RELEASE_MIRROR_CI_KEY, and the build job downloads its tools through the
+# release mirror. `id-token: write` is a caller contract: the mise action
+# exchanges the job's OIDC token for a session token, and GitHub refuses to
+# start a called workflow whose job asks for a permission its caller withholds.
+permissions:
+  contents: read
+
+env:
+  # Tests that create git repositories get main as their first branch,
+  # whatever the runner image's git defaults to.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+  # The CI profile; local work loads dev from .miserc.toml, which CI never does.
+  MISE_ENV: ci
+
+jobs:
+  # Whether a pull request changes anything the build reads. Documentation is
+  # the root's Markdown files, docs/, and openspec/. A documentation file
+  # still counts as a build input when a source names its path, such as a
+  # test that reads it.
+  changes:
+    name: Changes
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    runs-on: ${{ inputs.light-runner }}
+    # One API call and a checkout to search; the caller supplies its runner.
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.scope.outputs.build }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          list-files: json
+          filters: |
+            all:
+              - '**'
+            docs:
+              - '*.md'
+              - 'docs/**'
+              - 'openspec/**'
+      - name: Decide whether to build
+        id: scope
+        shell: bash
+        env:
+          ALL: ${{ steps.filter.outputs.all_count }}
+          DOCS: ${{ steps.filter.outputs.docs_count }}
+          DOCS_FILES: ${{ steps.filter.outputs.docs_files }}
+        run: |
+          build=false
+          if [ "$ALL" != "$DOCS" ]; then
+            build=true
+          else
+            while IFS= read -r file; do
+              # A source that reads the file spells its path from the root, or
+              # a relative path that climbs to the root and ends in it.
+              if git grep -qF -e "/$file\"" -e "\"$file\"" -e "\"./$file\"" -e "/$file'" -e "'$file'" -e "'./$file'" \
+                -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.mts' '*.cts'; then
+                echo "A source reads $file, so the build reads it."
+                build=true
+                break
+              fi
+            done < <(jq -r '.[]' <<<"$DOCS_FILES")
+          fi
+          echo "build=$build" >>"$GITHUB_OUTPUT"
+
+  build:
+    name: Build and test
+    needs: changes
+    if: ${{ !cancelled() && !github.event.pull_request.draft }}
+    # Final labels come from the rendered caller; a documentation-only change
+    # takes the light runner.
+    runs-on: ${{ needs.changes.outputs.build == 'false' && inputs.light-runner || fromJSON(inputs.build-runner) }}
+    permissions:
+      contents: read
+      # A check:versions task reads a pull request that changes a manifest
+      # version, to tell a version pull request apart from a hand edit.
+      pull-requests: read
+      # The mise action's release mirror session token.
+      id-token: write
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check out repository
+        timeout-minutes: 3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tools cache is keyed on the mise lock files, which pin every tool a
+      # locked install takes, and not on mise-action's default hash of every
+      # config file: a template update edits mise.toml, and that default would
+      # drop the cache for every pull request until the next default-branch
+      # run saved one. A caller with no lock file keeps the default key.
+      - name: Install locked tools
+        timeout-minutes: 5
+        uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
+        env:
+          MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
+        with:
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+          version: ${{ inputs.mise-version }}
+          working_directory: ${{ inputs.working-directory }}
+          cache_save_post: "false"
+          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}'
+      # Bun's package cache, keyed on bun.lock. Every run restores it; only a
+      # push to the default branch or a dispatch, which only a user with write
+      # access starts, saves it, so a pull request never writes an entry
+      # another run restores. A caller that lands through a merge queue has no
+      # push run, so its daily refresh dispatches CI on the default branch.
+      - name: Restore the Bun package cache
+        id: bun-cache
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/bun.lock', inputs.working-directory)) }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
+      # A documentation-only pull request runs the documentation checks the
+      # repository defines.
+      - name: Documentation checks
+        if: needs.changes.outputs.build == 'false'
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          tasks=()
+          for task in lint:md lint:typos lint:prose specs; do
+            if mise tasks info "$task" >/dev/null 2>&1; then
+              tasks+=("$task")
+            fi
+          done
+          if [ "${#tasks[@]}" -eq 0 ]; then
+            echo "This repository defines no documentation check."
+            exit 0
+          fi
+          failed=()
+          for task in "${tasks[@]}"; do
+            mise run "$task" || failed+=("$task")
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::Failed: ${failed[*]}"
+            exit 1
+          fi
+      # The project's [deps.bun] provider runs `bun install --frozen-lockfile`
+      # before the first task, so verify finds node_modules in place.
+      - name: Verify
+        if: needs.changes.outputs.build != 'false'
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: mise run verify
+      - name: Save the Bun package cache
+        if: >-
+          needs.changes.outputs.build != 'false' && steps.bun-cache.outputs.cache-hit != 'true'
+          && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push'
+          && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)))
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/bun.lock', inputs.working-directory)) }}
+
+  # The one check a ruleset requires: it reports on every pull request and
+  # merge queue run, and fails when the build failed or was cancelled. A build
+  # skipped by its own condition counts as passing. Its name keeps the
+  # required check `verify / Verify` while the jobs behind it change.
+  #
+  # `actions: read` is a caller contract: GitHub refuses to start a called
+  # workflow whose job asks for a permission its caller withholds.
+  verify:
+    name: Verify
+    needs: [changes, build]
+    if: ${{ always() && !github.event.pull_request.draft }}
+    runs-on: ${{ inputs.light-runner }}
+    timeout-minutes: 2
+    # Reads this run and its newer runs; the caller grants it.
+    permissions:
+      actions: read
+    steps:
+      - uses: victor-software-house/actions/verify-jobs@1c5fa491b36ade8795cca7288caf078851ff9520 # main, 2026-11-14
+        with:
+          needs: ${{ toJSON(needs) }}
+          jobs: build

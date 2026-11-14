@@ -12,6 +12,7 @@ Each piece lives here once, and every repository that uses it pins one commit.
 | `mbx-cache/` | An action that sets mbx up with the organization's remote cache, with credentials the release mirror signs for the job | [mbx-cache](mbx-cache/README.md) |
 | `macos-signing/` | Actions that load and remove the macOS signing identities | [macos-signing](macos-signing/README.md) |
 | `.github/workflows/rust-ci.yml` | A reusable workflow: Rust build, tests and checks behind one `Verify` job | [Rust CI](docs/rust-ci.md) |
+| `.github/workflows/bun-ci.yml` | A reusable workflow: a Bun repository's `mise run verify` behind one `Verify` job | [Bun CI](docs/bun-ci.md) |
 | `.github/workflows/template-check.yml` | A reusable workflow that fails when a newer template tag would change the repository | [Template check](docs/template-check.md) |
 | `.github/workflows/secrets.yml` | A reusable workflow that scans commits for credentials with gitleaks | [Secrets scan](docs/secrets.md) |
 | `tasks/rust.toml` | A mise task catalog with the standard Rust tasks | [Rust catalog](tasks/README.md#rust-catalog) |
