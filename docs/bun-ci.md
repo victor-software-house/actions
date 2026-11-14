@@ -52,7 +52,7 @@ A documentation-only pull request runs whichever of `lint:md`, `lint:typos`, `li
 ## Dependencies
 
 The repository's `[deps.bun]` provider runs `bun install --frozen-lockfile` before each `mise run`, so `verify` finds `node_modules` in place, and a stale `bun.lock` fails the run.
-`bunfig.toml` takes the GitHub Packages token from `GITHUB_TOKEN`, which the build job sets to the job's token.
+`bunfig.toml` takes the GitHub Packages token from `GITHUB_TOKEN`, which only the two steps that run mise carry.
 
 Bun's package cache, `~/.bun/install/cache`, is keyed on `bun.lock` and restored on every run.
 Only a push to the default branch or a dispatch saves it, so a pull request never writes an entry another run restores.

@@ -128,11 +128,6 @@ jobs:
       id-token: write
       # bun install reads the organization's packages from GitHub Packages.
       packages: read
-    # bunfig.toml takes GitHub Packages' token from GITHUB_TOKEN, and every
-    # mise run installs node_modules first through the [deps.bun] provider,
-    # so every step that runs mise has it.
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -179,6 +174,11 @@ jobs:
         if: needs.changes.outputs.build == 'false'
         timeout-minutes: 3
         shell: bash
+        # bunfig.toml takes GitHub Packages' token from GITHUB_TOKEN, and every
+        # mise run installs node_modules first through the [deps.bun]
+        # provider, so the two steps that run mise get it, and no other step.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           tasks=()
           for task in lint:md lint:typos lint:prose specs; do
@@ -203,6 +203,8 @@ jobs:
       - name: Verify
         if: needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: mise run verify
       - name: Save the Bun package cache
         if: >-
