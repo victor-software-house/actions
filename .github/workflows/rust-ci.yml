@@ -266,7 +266,7 @@ jobs:
       - &install-toolchain
         name: Install locked toolchain
         id: toolchain
-        if: needs.changes.outputs.build != 'false'
+        if: needs.changes.outputs.build != 'false' || env.TOOLCHAIN_ALWAYS == 'true'
         continue-on-error: true
         timeout-minutes: 3
         uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
@@ -548,7 +548,8 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - name: Check out repository
+      - &light-checkout
+        name: Check out repository
         timeout-minutes: 3
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -559,7 +560,8 @@ jobs:
       # downloaded both of them. Here they move under the data directory,
       # where the cache holds them; the jobs on the cache volume keep the
       # default paths, which the volume holds.
-      - name: Keep the toolchains in the mise cache
+      - &keep-toolchains
+        name: Keep the toolchains in the mise cache
         shell: bash
         run: |
           data_dir=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
@@ -604,74 +606,6 @@ jobs:
   # jobs that commit one tag overwrite each other (last write wins, no merge),
   # and on a GitHub-hosted runner it saves under its own key suffix, so it
   # never races the build job for one key.
-  # The release freeze: check:registry fails while the default branch holds a
-  # version whose release is incomplete, after it waits for a running release
-  # (VERCTL_RELEASE_WAIT, 1800 s when unset). It has its own job on the light
-  # runner, so that wait holds no build machine, and it runs on every pull
-  # request and merge group, documentation-only ones too. It reads the release
-  # workflow's runs and the pull request's labels; the caller grants
-  # `actions: read` and `pull-requests: read`.
-  registry:
-    name: Release freeze
-    if: ${{ !cancelled() && !github.event.pull_request.draft }}
-    runs-on: ${{ inputs.light-runner }}
-    timeout-minutes: 40
-    env:
-      TOOLCHAIN_CACHE: "true"
-    permissions:
-      contents: read
-      actions: read
-      pull-requests: read
-      # The mise action's release mirror session token.
-      id-token: write
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
-    steps:
-      - name: Check out repository
-        timeout-minutes: 3
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # verctl reads the crates through cargo metadata, so the job installs
-      # the locked toolchain, kept in the GitHub mise cache as the static job
-      # keeps it.
-      - name: Keep the toolchains in the mise cache
-        shell: bash
-        run: |
-          data_dir=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
-          {
-            echo "MISE_RUSTUP_HOME=$data_dir/rustup"
-            echo "MISE_CARGO_HOME=$data_dir/cargo"
-          } >> "$GITHUB_ENV"
-      - name: Install locked toolchain
-        timeout-minutes: 5
-        uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
-        env:
-          RUSTUP_DOWNLOAD_TIMEOUT: "30"
-          MISE_LOCK_HASH: ${{ hashFiles(format('{0}/mise*.lock', inputs.working-directory)) }}
-        with:
-          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
-          mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
-          version: ${{ inputs.mise-version }}
-          working_directory: ${{ inputs.working-directory }}
-          cache: true
-          cache_save_post: "false"
-          cache_key: '{{#if env.MISE_LOCK_HASH}}{{cache_key_prefix}}-{{platform}}-{{version}}{{#if mise_env}}-{{mise_env}}{{/if}}-lock-{{env.MISE_LOCK_HASH}}{{else}}{{default}}{{/if}}{{#if env.MISE_RUSTUP_HOME}}-rustup{{/if}}'
-      # A repository on a catalog older than check:registry has no freeze to
-      # run, as the static job skips a task the repository does not define.
-      - name: Release freeze
-        timeout-minutes: 35
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          if ! mise tasks info check:registry >/dev/null 2>&1; then
-            echo "::notice::check:registry is not defined here: no release freeze"
-            exit 0
-          fi
-          mise run check:registry
-
   publish:
     name: Publish checks
     needs: changes
@@ -738,6 +672,53 @@ jobs:
       - name: Package
         timeout-minutes: ${{ inputs.timeout-minutes }}
         run: mise x -- cargo package --locked --all-features --workspace
+
+  # The release freeze: check:registry fails while the default branch holds a
+  # version whose release is incomplete, after it waits for a running release
+  # (VERCTL_RELEASE_WAIT, 1800 s when unset). It has its own job on the light
+  # runner, so that wait holds no build machine, and it runs on every pull
+  # request and merge group, documentation-only ones too: TOOLCHAIN_ALWAYS
+  # runs the install steps that a documentation-only build skips. verctl
+  # reads the crates through cargo metadata, so the job needs the toolchain.
+  # It reads the release workflow's runs and the pull request's labels; the
+  # caller grants `actions: read` and `pull-requests: read`.
+  registry:
+    name: Release freeze
+    needs: changes
+    if: ${{ !cancelled() && !github.event.pull_request.draft }}
+    runs-on: ${{ inputs.light-runner }}
+    timeout-minutes: 45
+    env:
+      TOOLCHAIN_CACHE: "true"
+      TOOLCHAIN_ALWAYS: "true"
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      # The mise action's release mirror session token.
+      id-token: write
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - *light-checkout
+      - *keep-toolchains
+      - *install-toolchain
+      - *remove-partial-toolchains
+      - *install-toolchain-retry
+      # A repository on a catalog older than check:registry has no freeze to
+      # run, as the static job skips a task the repository does not define.
+      - name: Release freeze
+        timeout-minutes: 35
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if ! mise tasks info check:registry >/dev/null 2>&1; then
+            echo "::notice::check:registry is not defined here: no release freeze"
+            exit 0
+          fi
+          mise run check:registry
 
   # The one check a ruleset requires: it reports on every pull request and
   # merge queue run, and fails when any job it needs failed or was cancelled.
