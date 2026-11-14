@@ -1,0 +1,103 @@
+name: verify-jobs
+description: >-
+  Pass or fail a reusable workflow's one required check from the results of
+  the jobs behind it, passing a job that a newer run of the same workflow
+  cancelled
+author: victor-software-house
+
+inputs:
+  needs:
+    description: The calling job's needs context, as toJSON(needs) gives it
+    required: true
+  jobs:
+    description: >-
+      The jobs among needs that the check covers, separated by spaces; a
+      skipped job counts as passing
+    required: true
+  token:
+    description: A token that can read this repository's workflow runs and jobs
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    # One push can start two runs for the same head commit: force-pushing a
+    # stacked pull request's head and its base, which is another pull request's
+    # head, in one push gives the pull request two `synchronize` events. The
+    # caller's concurrency group cancels the older run, and a check that runs
+    # always() would report it as failed, which a re-run of the whole workflow
+    # then clears. So a cancelled result passes only when a newer run of this
+    # workflow, for the same event, branch and head commit, was created no
+    # later than the second the first cancelled job ended: that run is the one
+    # that cancelled it, and it reports instead. A job cancelled by its own
+    # timeout with no such run, or a run cancelled with no newer run behind it,
+    # still fails. The step does not read cancelled(): it starts after the jobs
+    # it covers end, and in a run that its concurrency group had already
+    # cancelled, cancelled() still read false.
+    - name: Report the jobs
+      shell: bash
+      env:
+        NEEDS: ${{ inputs.needs }}
+        JOBS: ${{ inputs.jobs }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPOSITORY: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        # Each named job must be among needs with a known result, so a
+        # misspelled or missing job fails the check instead of passing it.
+        if [ -z "${JOBS// /}" ]; then
+          echo "::error::verify-jobs was given no jobs to check."
+          exit 1
+        fi
+        cancelled=false
+        for job in $JOBS; do
+          result=$(jq -r --arg job "$job" '.[$job].result // empty' <<<"$NEEDS")
+          echo "$job: ${result:-missing}"
+          case "$result" in
+            success | skipped) ;;
+            cancelled) cancelled=true ;;
+            failure) exit 1 ;;
+            "")
+              echo "::error::$job is not among this job's needs."
+              exit 1
+              ;;
+            *)
+              echo "::error::$job has the unknown result $result."
+              exit 1
+              ;;
+          esac
+        done
+        if [ "$cancelled" = false ]; then
+          exit 0
+        fi
+        if ! run=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" \
+          --jq '"\(.workflow_id) \(.head_sha) \(.event) \(.head_branch)"'); then
+          echo "A job was cancelled, and this run cannot be read to look for a newer one."
+          exit 1
+        fi
+        read -r workflow sha event branch <<<"$run"
+        if ! ended=$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+          --jq '[.jobs[] | select(.conclusion == "cancelled" and .completed_at != null) | .completed_at] | min // empty'); then
+          echo "A job was cancelled, and this run's jobs cannot be read."
+          exit 1
+        fi
+        # The time comes from the API and is checked before it goes into the
+        # jq program below.
+        if ! [[ "$ended" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+          echo "A job was cancelled, and when it ended cannot be read."
+          exit 1
+        fi
+        # The branch name is compared here, never spliced into the jq program,
+        # because a pull request's author chooses it.
+        if ! branches=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$sha&event=$event&per_page=100" \
+          --jq ".workflow_runs[] | select(.workflow_id == $workflow and .id > $RUN_ID and .created_at <= \"$ended\") | .head_branch"); then
+          echo "A job was cancelled, and the runs for $sha cannot be listed."
+          exit 1
+        fi
+        newer=$(printf '%s\n' "$branches" | grep -Fxc -- "$branch" || true)
+        if [ "$newer" -gt 0 ]; then
+          echo "A job was cancelled because a newer run for $sha replaced this one; it reports instead."
+          exit 0
+        fi
+        echo "A job was cancelled, and no run for $sha created before $ended replaces this one."
+        exit 1
