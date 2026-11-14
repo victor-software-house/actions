@@ -5,7 +5,8 @@
 # place of a pinned nightly; test drops --lib, which fails a crate with no
 # library; test and test:doc add --no-fail-fast, so a run reports every
 # failing test binary; test:doc builds in target/doctest, apart from test; doc, check:docs and update:own are new, and check:docs-probes tests check:docs; check:versions fails when VERCTL_CONFIG names no
-# file; and semver fails when the release config is missing. The source's verify stays with each repository, which composes its
+# file and runs `check versions`, the name verctl 0.8.6-rc.2 gives the old
+# `check --versions`; and semver fails when the release config is missing. The source's verify stays with each repository, which composes its
 # own.
 set -euo pipefail
 source_url=https://raw.githubusercontent.com/victor-software-house/ctl-core/4d5a85ce1cfe933e35eac4dccdfba67ae541f468/tasks/rust.toml
@@ -34,7 +35,8 @@ versions_guard='if [ -n "${VERCTL_CONFIG:-}" ] && [ ! -f "$VERCTL_CONFIG" ]; the
   exit 1
 fi
 '
-expect '.["check:versions"].run' "$versions_guard$(yq -p toml -o json -r '.["check:versions"].run' "$src")"
+versions_run=$(yq -p toml -o json -r '.["check:versions"].run' "$src")
+expect '.["check:versions"].run' "$versions_guard${versions_run/check --versions/check versions}"
 semver_guard='config="${VERCTL_CONFIG:-.ctl/ver.yaml}"
 if [ ! -f "$config" ]; then
   echo "no $config: semver runs verctl'"'"'s ver task, which needs the release config" >&2
