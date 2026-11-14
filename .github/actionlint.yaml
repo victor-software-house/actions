@@ -11,6 +11,13 @@ paths:
       # mise-action renders its cache_key input as a Handlebars template, so
       # {{env.MISE_LOCK_HASH}} is meant for it, not for GitHub.
       - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
+  .github/workflows/bun-ci.yml:
+    ignore:
+      # As in rust-ci.yml: every step of the build job sets its own timeout,
+      # and Verify's takes the caller's timeout-minutes input.
+      - missing-timeout
+      # mise-action renders cache_key as a Handlebars template.
+      - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
   mise/action.yml:
     ignore:
       # The step refuses a mirror-url holding any character outside
