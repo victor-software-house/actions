@@ -85,8 +85,9 @@ Crates our own accounts publish are trusted, so `update:own` updates exactly tho
 - It runs one `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update` for the crates in the intersection.
   Each is named as `-p <name>@<version>`, since cargo rejects a bare name that the lock holds in two versions.
 - The allow setting covers the whole resolve, so a new release of an owned crate can pull a fresh crate we do not own past the cooldown.
-  The task records the packages of `Cargo.lock`, read from the file so a feature off by default hides none, before and after, and only an owned crate from crates.io may be added or change version.
-  Any other change restores `Cargo.lock` and fails the task, naming those crates with their new versions.
+- The task records the packages of `Cargo.lock` before and after, read from the file so a feature off by default hides none.
+  Only an owned crate from crates.io may be added or change version.
+- Any other change restores `Cargo.lock` and fails the task, naming those crates with their new versions.
   Wait for the cooldown, or update them deliberately with `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update -p <crate> --precise <version>` after review.
 - On success it prints each owned crate that moved, old version to new.
 - It exits 0 with a notice when no locked crate is owned by those logins.
