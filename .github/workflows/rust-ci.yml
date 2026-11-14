@@ -170,6 +170,9 @@ jobs:
       # A check:versions task reads a pull request that changes a manifest
       # version, to tell the Version PR apart from a hand edit.
       pull-requests: read
+      # A check:registry task reads the runs of the release workflow, to hold
+      # a pull request while a release of the default branch is incomplete.
+      actions: read
       # The mise action's release mirror session token.
       id-token: write
     # Tools only the tests start, such as the shells a script test runs, live

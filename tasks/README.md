@@ -38,6 +38,7 @@ It composes `verify` from the tasks it runs, beside its own `check:features` and
 | `check:docs` | The docs standard below, for a repository that publishes |
 | `update:own` | `cargo update` of the locked crates that `CARGO_TRUSTED_OWNERS` publish, past the publish-age cooldown; see below |
 | `check:versions` | Fails when a manifest version changed outside a Version PR |
+| `check:registry` | `mise run ver check registry`: each crate's crates.io state, and the release freeze |
 | `semver` | `mise run ver semver`, at the release type the pending fragments allow |
 | `check:toolchain`, `deny`, `deny:advisories`, `deps` | As in ctl-core's catalog |
 
@@ -47,7 +48,7 @@ It composes `verify` from the tasks it runs, beside its own `check:features` and
 
 - `format` and its `RUSTFMT_TOOLCHAIN`;
 - the `test` command without `--lib`;
-- the added `doc`, `check:docs` and `update:own`;
+- the added `doc`, `check:docs`, `check:registry` and `update:own`;
 - the guard in `check:versions`.
 
 ### doc
@@ -93,10 +94,12 @@ Crates our own accounts publish are trusted, so `update:own` updates exactly tho
 It reads crates.io and writes `Cargo.lock`, so it belongs in no `verify` list.
 Run it by hand.
 
-### check:versions and semver
+### check:versions, check:registry and semver
 
-- `check:versions` passes with a notice when the repository has no `.ctl/ver.yaml` and `VERCTL_CONFIG` is unset.
-- It fails when `VERCTL_CONFIG` names no file.
+- `check:versions` and `check:registry` pass with a notice when the repository has no `.ctl/ver.yaml` and `VERCTL_CONFIG` is unset.
+- They fail when `VERCTL_CONFIG` names no file.
+- `check:registry` needs verctl 0.8.6-rc.4 or later.
+  On a pull request or a merge group it reads the release workflow's runs and the pull request's labels with `GITHUB_TOKEN`, so the caller grants `actions: read` and `pull-requests: read`.
 - A repository that declares releases includes verctl's `ver` task, which `check:versions` calls.
 - `semver` also runs through `ver`, so a published crate includes `ver` too.
   It fails when the release config is missing.
