@@ -200,6 +200,7 @@ fi
 '''
 
 # A manifest version changes only on the Version PR, through a fragment.
+# It runs verctl's `versions` check, which needs verctl 0.8.6-rc.2 or later.
 # The release config is what declares releases, so a repository without one
 # has no version to compare, and needs neither the `ver` task nor verctl. A
 # repository with one includes verctl's `ver` task beside this catalog, and
@@ -218,7 +219,7 @@ if [ ! -f "$config" ]; then
   echo "no $config: this repository declares no releases, nothing to compare"
   exit 0
 fi
-mise run ver check --versions
+mise run ver check versions
 '''
 
 # Published crates only. CI runs it before packaging; it compares against the
