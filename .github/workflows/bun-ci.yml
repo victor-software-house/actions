@@ -38,9 +38,10 @@ on:
 
 # The caller passes the organization secrets RELEASE_MIRROR_URL and
 # RELEASE_MIRROR_CI_KEY, and the build job downloads its tools through the
-# release mirror. `id-token: write` and `packages: read` are caller contracts: the mise action
-# exchanges the job's OIDC token for a session token, and GitHub refuses to
-# start a called workflow whose job asks for a permission its caller withholds.
+# release mirror. `id-token: write` and `packages: read` are caller
+# contracts: the mise action exchanges the job's OIDC token for a session
+# token, bun install reads GitHub Packages, and GitHub refuses to start a
+# called workflow whose job asks for a permission its caller withholds.
 permissions:
   contents: read
 
