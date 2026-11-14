@@ -14,6 +14,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
+      packages: read
       pull-requests: read
     uses: victor-software-house/actions/.github/workflows/bun-ci.yml@<commit> # main, <date>
     with:
@@ -24,6 +25,7 @@ jobs:
 ```
 
 The permissions follow [Rust CI](rust-ci.md#caller): `Changes` and `Build and test` read the pull request, `Verify` reads the run with `actions: read`, and the build job's mise action needs `id-token: write`.
+The build job also reads the organization's packages, so the caller grants `packages: read`.
 
 ## Inputs
 
@@ -49,7 +51,8 @@ A documentation-only pull request runs whichever of `lint:md`, `lint:typos`, `li
 
 ## Dependencies
 
-The repository's `[deps.bun]` provider runs `bun install --frozen-lockfile` before the first task, so `verify` finds `node_modules` in place, and a stale `bun.lock` fails the run.
+The repository's `[deps.bun]` provider runs `bun install --frozen-lockfile` before each `mise run`, so `verify` finds `node_modules` in place, and a stale `bun.lock` fails the run.
+`bunfig.toml` takes the GitHub Packages token from `GITHUB_TOKEN`, which the build job sets to the job's token.
 
 Bun's package cache, `~/.bun/install/cache`, is keyed on `bun.lock` and restored on every run.
 Only a push to the default branch or a dispatch saves it, so a pull request never writes an entry another run restores.

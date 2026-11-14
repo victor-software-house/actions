@@ -38,7 +38,7 @@ on:
 
 # The caller passes the organization secrets RELEASE_MIRROR_URL and
 # RELEASE_MIRROR_CI_KEY, and the build job downloads its tools through the
-# release mirror. `id-token: write` is a caller contract: the mise action
+# release mirror. `id-token: write` and `packages: read` are caller contracts: the mise action
 # exchanges the job's OIDC token for a session token, and GitHub refuses to
 # start a called workflow whose job asks for a permission its caller withholds.
 permissions:
@@ -125,6 +125,13 @@ jobs:
       pull-requests: read
       # The mise action's release mirror session token.
       id-token: write
+      # bun install reads the organization's packages from GitHub Packages.
+      packages: read
+    # bunfig.toml takes GitHub Packages' token from GITHUB_TOKEN, and every
+    # mise run installs node_modules first through the [deps.bun] provider,
+    # so every step that runs mise has it.
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -195,8 +202,6 @@ jobs:
       - name: Verify
         if: needs.changes.outputs.build != 'false'
         timeout-minutes: ${{ inputs.timeout-minutes }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: mise run verify
       - name: Save the Bun package cache
         if: >-
