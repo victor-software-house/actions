@@ -6,10 +6,13 @@ description: >-
 author: victor-software-house
 
 inputs:
-  results:
+  needs:
+    description: The calling job's needs context, as toJSON(needs) gives it
+    required: true
+  jobs:
     description: >-
-      The results of the jobs the check covers, separated by spaces, as
-      needs.<job>.result gives them; a skipped job counts as passing
+      The jobs among needs that the check covers, separated by spaces; a
+      skipped job counts as passing
     required: true
   token:
     description: A token that can read this repository's workflow runs and jobs
@@ -34,20 +37,35 @@ runs:
     - name: Report the jobs
       shell: bash
       env:
-        RESULTS: ${{ inputs.results }}
+        NEEDS: ${{ inputs.needs }}
+        JOBS: ${{ inputs.jobs }}
         GH_TOKEN: ${{ inputs.token }}
         REPOSITORY: ${{ github.repository }}
         RUN_ID: ${{ github.run_id }}
       run: |
-        echo "Job results: $RESULTS"
+        # Each named job must be among needs with a known result, so a
+        # misspelled or missing job fails the check instead of passing it.
+        if [ -z "${JOBS// /}" ]; then
+          echo "::error::verify-jobs was given no jobs to check."
+          exit 1
+        fi
         cancelled=false
-        for result in $RESULTS; do
-          if [ "$result" = failure ]; then
-            exit 1
-          fi
-          if [ "$result" = cancelled ]; then
-            cancelled=true
-          fi
+        for job in $JOBS; do
+          result=$(jq -r --arg job "$job" '.[$job].result // empty' <<<"$NEEDS")
+          echo "$job: ${result:-missing}"
+          case "$result" in
+            success | skipped) ;;
+            cancelled) cancelled=true ;;
+            failure) exit 1 ;;
+            "")
+              echo "::error::$job is not among this job's needs."
+              exit 1
+              ;;
+            *)
+              echo "::error::$job has the unknown result $result."
+              exit 1
+              ;;
+          esac
         done
         if [ "$cancelled" = false ]; then
           exit 0
