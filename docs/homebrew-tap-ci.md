@@ -45,6 +45,7 @@ That is the owner and repository without the `homebrew-` prefix, in lower case.
 So the `Style` step passes the `Formula`, `HomebrewFormula`, `Casks` and `cmd` directories the tap has.
 A tap with neither formula directory keeps its formulae at its root, so the step then adds the root's `.rb` files.
 It fails when it finds nothing to check.
+
 A tap rendered from a template also holds its own task scripts, which follow the repository's lints, not Homebrew's bash style.
 
 ## Not yet checked
