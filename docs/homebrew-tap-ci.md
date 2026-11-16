@@ -1,7 +1,7 @@
 # Homebrew tap CI
 
 `.github/workflows/homebrew-tap-ci.yml` checks a Homebrew tap repository behind one `Style` job.
-It runs `brew style` and `brew readall` over the tap.
+It runs `brew style` over the tap's formulae, casks and commands, and `brew readall` over the tap.
 It runs no `brew audit --online`, because a private tap's homepages answer 404.
 
 ## Caller
@@ -31,7 +31,7 @@ The workflow takes no secrets.
 | Step | Runs |
 |:--|:--|
 | `Set up Homebrew` | `Homebrew/actions/setup-homebrew`, pinned by commit |
-| `Style` | `brew style` over the tap |
+| `Style` | `brew style` over the tap's formulae, casks and commands |
 | `Read every formula and cask` | `brew readall` over the tap |
 
 The setup action fetches the tap's commit itself, replaces the workspace with it and registers the tap.
@@ -40,6 +40,13 @@ The action's `token` input is the workflow token, which lets it fetch a private 
 
 The steps pass the tap to brew by the action's `tap-name` output.
 That is the owner and repository without the `homebrew-` prefix, in lower case.
+
+`brew style` lints every Ruby and shell file under the paths it gets, and a tap name stands for the whole repository.
+So the `Style` step passes the `Formula`, `HomebrewFormula`, `Casks` and `cmd` directories the tap has.
+A tap with neither formula directory keeps its formulae at its root, so the step then adds the root's `.rb` files.
+It fails when it finds nothing to check.
+
+A tap rendered from a template also holds its own task scripts, which follow the repository's lints, not Homebrew's bash style.
 
 ## Not yet checked
 
