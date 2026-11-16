@@ -47,13 +47,18 @@ jobs:
         run: |
           cd "$(brew --repository "$TAP")"
           paths=()
-          for dir in Formula Casks cmd; do
+          for dir in Formula HomebrewFormula Casks cmd; do
             if [[ -d $dir ]]; then
               paths+=("$dir")
             fi
           done
+          # A tap with neither formula directory keeps its formulae at its root.
+          if [[ ! -d Formula && ! -d HomebrewFormula ]]; then
+            shopt -s nullglob
+            paths+=(./*.rb)
+          fi
           if (( ${#paths[@]} == 0 )); then
-            echo "::error::the tap has no Formula, Casks or cmd directory"
+            echo "::error::the tap has no formula, cask or command to check"
             exit 1
           fi
           brew style "${paths[@]}"
