@@ -128,33 +128,43 @@ jobs:
         run: |
           set -euo pipefail
           file="Casks/${CASK}.rb"
-          if grep -qxF "  version \"${VERSION}\"" "$file"; then
-            echo "already at ${VERSION}"
-            exit 0
-          fi
-          # The newest version wins, by sort -V over the captured version. A
-          # late run of an older tag defers to the cask's version on the
+          # The newest version wins, by sort -V over the captured version.
+          # A late run of an older tag defers to the cask's version on the
           # default branch and to every open bump of the cask, and writes
-          # nothing. The title check keeps a cask whose token starts with
-          # this one's token out of the match.
+          # nothing.
           newer() {
             [[ $1 != "$2" && $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1) == "$1" ]]
           }
-          cask_version=$(sed -n 's|^  version "\(.*\)"$|\1|p' "$file")
-          if [[ -z $cask_version ]]; then
-            echo "::error::${file} has no version line"
-            exit 1
+          # Sets cask_version to the cask's version at the default branch's
+          # tip, whatever ref the caller's run checked out.
+          default=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          read_tip() {
+            git fetch --quiet origin "+refs/heads/${default}:refs/remotes/origin/${default}"
+            cask_version=$(git show "origin/${default}:${file}" | sed -n 's|^  version "\(.*\)"$|\1|p')
+            if [[ -z $cask_version ]]; then
+              echo "::error::${file} has no version line"
+              exit 1
+            fi
+          }
+          read_tip
+          if [[ $cask_version == "$VERSION" ]]; then
+            echo "already at ${VERSION}"
+            exit 0
           fi
           if ! newer "$VERSION" "$cask_version"; then
             echo "::notice::${CASK} ${VERSION} is not newer than ${cask_version} on the default branch, so nothing changes."
             exit 0
           fi
+          # The title check keeps a cask whose token starts with this one's
+          # token out of the match. An open pull request at this version is
+          # this run's own, from an earlier attempt, and is reused below.
           open_bumps=$(gh pr list --state open --limit 100 --json number,headRefName,title \
             | jq -r --arg prefix "bump/${CASK}-" --arg title "${CASK}: bump to " \
               '.[] | select((.headRefName | startswith($prefix)) and (.title | startswith($title))) | "\(.number) \(.headRefName | ltrimstr($prefix))"')
           older=()
           while read -r number other; do
             [[ -n $number ]] || continue
+            [[ $other == "$VERSION" ]] && continue
             if ! newer "$VERSION" "$other"; then
               echo "::notice::${CASK} ${VERSION} is not newer than ${other}, which has open pull request #${number}, so nothing changes."
               exit 0
@@ -170,24 +180,41 @@ jobs:
             echo "::error::${ASSET} digest ${digest} does not match the download (${sha})"
             exit 1
           fi
-          sed -i "s|^  version \".*\"$|  version \"${VERSION}\"|; s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" "$file"
-          grep -qxF "  version \"${VERSION}\"" "$file"
-          grep -qxF "  sha256 \"${sha}\"" "$file"
+          # An older bump of this cask that has not merged edits the same
+          # lines, so it would conflict with this one. One that merged since
+          # the list was read is already in the default branch, which the
+          # tip check below reads.
+          for number in "${older[@]}"; do
+            state=$(gh pr view "$number" --json state --jq .state)
+            if [[ $state != OPEN ]]; then
+              echo "::notice::Pull request #${number} is ${state}, so it stays."
+              continue
+            fi
+            gh pr close "$number" --delete-branch --comment "Superseded by ${TAG}."
+          done
+          # The bump commit goes on the default branch's current tip, so a
+          # bump that merged meanwhile is part of what this one edits.
+          read_tip
+          if [[ $cask_version == "$VERSION" ]] || ! newer "$VERSION" "$cask_version"; then
+            echo "::notice::${CASK} is at ${cask_version} on the default branch, so ${VERSION} changes nothing."
+            exit 0
+          fi
           branch="bump/${CASK}-${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
+          git switch -C "$branch" "origin/${default}"
+          sed -i "s|^  version \".*\"$|  version \"${VERSION}\"|; s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" "$file"
+          grep -qxF "  version \"${VERSION}\"" "$file"
+          grep -qxF "  sha256 \"${sha}\"" "$file"
           git add "$file"
           git commit -m "${CASK}: bump to ${VERSION}"
           git push --force origin "$branch"
-          gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
-            --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
-          # An older bump of this cask that has not merged edits the same
-          # lines, so it would conflict once this one merges.
-          current=$(gh pr view "$branch" --json number --jq .number)
-          for number in "${older[@]}"; do
-            gh pr close "$number" --delete-branch --comment "Superseded by ${TAG} in #${current}."
-          done
-          # The ruleset's required checks run on the new pull request, so
-          # the merge waits for them instead of failing.
+          # A rerun reuses the pull request its earlier attempt opened.
+          open=$(gh pr list --head "$branch" --state open --json number --jq length)
+          if [[ $open -eq 0 ]]; then
+            gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
+              --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+          fi
+          # The ruleset's required checks run on the pull request, so the
+          # merge waits for them instead of failing.
           gh pr merge "$branch" --auto --squash --delete-branch

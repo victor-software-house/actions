@@ -61,19 +61,25 @@ So the bump opens and merges its pull request as the App.
 2. It mints two App tokens and checks out the tap with the first.
    The tap token has `contents: write` and `pull-requests: write` on the tap alone, and serves the checkout, the push and the pull request.
    The source token has `contents: read` on the source repository alone, and serves only the release reads.
-3. It stops with success when the cask already has the version.
+3. It reads the cask's version at the default branch's tip, whatever ref the caller's run checked out.
+   It stops with success when the cask already has the version.
 4. It compares versions.
    It goes on only when its version is newer than the cask's version on the default branch.
    It must also be newer than the version of every other open bump pull request of the cask.
    Otherwise it writes a `::notice::` that names the newer version, changes nothing and stops with success.
-   So a late run of an old tag is not an error, and a version equal to an open bump's leaves that pull request alone.
+   So a late run of an old tag is not an error.
+   An open pull request at the run's own version is its earlier attempt's, and step 9 reuses it.
 5. It downloads the asset with `gh` and fails unless its sha256 matches the digest the release lists for it.
-6. It rewrites the cask's `version` and `sha256` lines and checks that both changed.
-7. It commits on `bump/<cask>-<version>` as `github-actions[bot]` and pushes the branch.
-8. It opens a pull request whose body links the release.
-   It closes every other open bump pull request of the cask, which step 4 found older, with a comment that names the new tag, and deletes their branches.
+6. It closes the open bump pull requests that step 4 found older, with a comment that names the new tag, and deletes their branches.
+   It checks each one's state first, and leaves one that is not open, with a notice.
+7. It fetches the default branch again and reads the cask's version at its tip.
+   It stops with a notice when the cask is already at or past this version, as when an older bump merged since step 3.
+8. It commits on `bump/<cask>-<version>`, built on that tip, as `github-actions[bot]`.
+   It rewrites the cask's `version` and `sha256` lines, checks that both changed, and pushes the branch.
+9. It opens a pull request whose body links the release, unless the branch already has an open one.
    It then enables auto-merge with squash.
    The merge waits for the required checks, so the step does not fail while they run.
+   A rerun after a partial failure repairs it this way.
 
 Every input reaches the shell through `env:`.
 
@@ -96,3 +102,4 @@ That is fine, because the newest tag wins.
 Auto-merge returns before the merge, so a run frees the group while its pull request is still open.
 The next run then finds that pull request, and closes it when its own version is newer.
 That keeps two pull requests that edit the same lines from standing open.
+Building the commit on the default branch's current tip covers an older pull request that merged while the run was working.
