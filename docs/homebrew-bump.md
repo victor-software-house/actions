@@ -29,6 +29,7 @@ The caller contract:
   The workflow mints a token for the tap with `contents: write` and `pull-requests: write`, and one for the source repository with `contents: read`.
 - The source repository has the tap's owner, because the tokens are requested for repository names under that owner.
 - The tap allows auto-merge in its settings, because the workflow enables it on the pull request.
+- The tap turns on automatically deleting head branches, because the CLI does not delete the branch of an auto-merged pull request.
 - The caller passes both secrets.
 - The caller's own concurrency group, if it has one, is not named `homebrew-bump-<cask>`, which the workflow holds.
 
@@ -65,7 +66,7 @@ So the bump opens and merges its pull request as the App.
 5. It rewrites the cask's `version` and `sha256` lines and checks that both changed.
 6. It commits on `bump/<cask>-<version>` as `github-actions[bot]` and pushes the branch.
 7. It opens a pull request whose body links the release, unless the branch already has an open one.
-   It then enables auto-merge with squash and branch deletion.
+   It then enables auto-merge with squash.
    The merge waits for the required checks, so the step does not fail while they run.
 
 One bump per cask runs at a time, and a running one is never cancelled.
