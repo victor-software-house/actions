@@ -1,0 +1,146 @@
+# The reusable Homebrew bump workflow points one cask of a tap at a release
+# of its app: it sets the cask's version and the sha256 of the release asset,
+# then opens and merges a pull request. The caller runs it from a release
+# job, a schedule or a dispatch, and passes the release's tag.
+#
+# The tap's default branch takes changes only through a pull request, and
+# the workflow token may not open one, so the bump opens and merges its pull
+# request as the Version Packages App. The caller passes that App's two
+# organization secrets, and the App is installed on the tap and on the
+# repository that holds the release.
+name: Homebrew bump
+
+on:
+  workflow_call:
+    inputs:
+      cask:
+        description: The cask's token; the file is Casks/<cask>.rb
+        type: string
+        required: true
+      source-repository:
+        description: The release's repository, as owner/name, in the tap's owner
+        type: string
+        required: true
+      tag:
+        description: The release tag to bump to
+        type: string
+        required: true
+      tag-pattern:
+        description: Bash extended regular expression the tag must match; its first capture group is the version
+        type: string
+        default: ^v([0-9]+\.[0-9]+\.[0-9]+)$
+      asset:
+        description: The release asset's file name
+        type: string
+        required: true
+      runner:
+        description: Final runner label for the job
+        type: string
+        default: ubuntu-26.04
+    secrets:
+      CHANGESET_VERSION_APP_CLIENT_ID:
+        description: The Version Packages App's client ID
+        required: true
+      CHANGESET_VERSION_APP_PRIVATE_KEY:
+        description: The Version Packages App's private key
+        required: true
+
+permissions:
+  contents: read
+
+# One bump per cask at a time, and a queued one waits. The group's prefix
+# keeps it apart from any group the caller names.
+concurrency:
+  group: homebrew-bump-${{ inputs.cask }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CASK: ${{ inputs.cask }}
+      SOURCE_REPOSITORY: ${{ inputs.source-repository }}
+      TAG: ${{ inputs.tag }}
+      TAG_PATTERN: ${{ inputs.tag-pattern }}
+      ASSET: ${{ inputs.asset }}
+    steps:
+      - name: Check the inputs
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! $CASK =~ ^[a-z0-9][a-z0-9@._+-]*$ ]]; then
+            echo "::error::cask is not a cask token (got '${CASK}')"
+            exit 1
+          fi
+          if [[ ! $SOURCE_REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::source-repository is not owner/name (got '${SOURCE_REPOSITORY}')"
+            exit 1
+          fi
+          if [[ ! $TAG =~ $TAG_PATTERN ]]; then
+            echo "::error::tag does not match ${TAG_PATTERN} (got '${TAG}')"
+            exit 1
+          fi
+          version=${BASH_REMATCH[1]-}
+          if [[ ! $version =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+            echo "::error::the pattern's first capture group is not a version (got '${version}')"
+            exit 1
+          fi
+          {
+            echo "version=${version}"
+            echo "source-name=${SOURCE_REPOSITORY#*/}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Mint the bump token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.CHANGESET_VERSION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CHANGESET_VERSION_APP_PRIVATE_KEY }}
+          repositories: |
+            ${{ github.event.repository.name }}
+            ${{ steps.target.outputs.source-name }}
+          permission-contents: write
+          permission-pull-requests: write
+      # The App's token stays in the checkout's git config, which the push
+      # below needs.
+      - name: Check out the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Bump the cask
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          file="Casks/${CASK}.rb"
+          if grep -qxF "  version \"${VERSION}\"" "$file"; then
+            echo "already at ${VERSION}"
+            exit 0
+          fi
+          # The release's own digest, checked against the downloaded file.
+          gh release download "$TAG" -R "$SOURCE_REPOSITORY" -p "$ASSET" -D "$RUNNER_TEMP"
+          sha=$(sha256sum "$RUNNER_TEMP/$ASSET" | cut -d' ' -f1)
+          digest=$(gh release view "$TAG" -R "$SOURCE_REPOSITORY" --json assets | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest')
+          if [[ $digest != "sha256:${sha}" ]]; then
+            echo "::error::${ASSET} digest ${digest} does not match the download (${sha})"
+            exit 1
+          fi
+          sed -i "s|^  version \".*\"$|  version \"${VERSION}\"|; s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" "$file"
+          grep -qxF "  version \"${VERSION}\"" "$file"
+          grep -qxF "  sha256 \"${sha}\"" "$file"
+          branch="bump/${CASK}-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add "$file"
+          git commit -m "${CASK}: bump to ${VERSION}"
+          git push --force origin "$branch"
+          gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
+            --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+          gh pr merge "$branch" --squash --delete-branch

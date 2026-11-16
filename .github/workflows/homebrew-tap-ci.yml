@@ -1,0 +1,47 @@
+# The reusable Homebrew tap CI workflow accepts a final runner label from its
+# caller. It checks a tap repository's style and that every formula and cask
+# in it reads, behind one `Style` job. It runs no `brew audit --online`: a
+# private tap's homepages answer 404 to the audit's request.
+name: Homebrew tap CI
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Final runner label for the job
+        type: string
+        default: ubuntu-26.04
+      timeout-minutes:
+        description: Cancels a hung job
+        type: number
+        default: 5
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    name: Style
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    steps:
+      # The action fetches the tap's commit itself, replaces the workspace
+      # with it and taps it, so no checkout step precedes it. Its token input
+      # lets it fetch a private tap.
+      - name: Set up Homebrew
+        id: homebrew
+        uses: Homebrew/actions/setup-homebrew@ceec4e8419bb3c97ce96e9dda7738499ed5f869d # 2026.11.14.1, 2026-11-14
+        with:
+          token: ${{ github.token }}
+      # tap-name is the owner and repository without the homebrew- prefix,
+      # in lower case, as the action registers the tap.
+      - name: Style
+        env:
+          TAP: ${{ steps.homebrew.outputs.tap-name }}
+        run: brew style "$TAP"
+      - name: Read every formula and cask
+        env:
+          TAP: ${{ steps.homebrew.outputs.tap-name }}
+        run: brew readall "$TAP"

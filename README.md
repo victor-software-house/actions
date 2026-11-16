@@ -15,6 +15,8 @@ Each piece lives here once, and every repository that uses it pins one commit.
 | `.github/workflows/bun-ci.yml` | A reusable workflow: a Bun repository's `mise run verify` behind one `Verify` job | [Bun CI](docs/bun-ci.md) |
 | `.github/workflows/template-check.yml` | A reusable workflow that fails when a newer template tag would change the repository | [Template check](docs/template-check.md) |
 | `.github/workflows/secrets.yml` | A reusable workflow that scans commits for credentials with gitleaks | [Secrets scan](docs/secrets.md) |
+| `.github/workflows/homebrew-tap-ci.yml` | A reusable workflow: `brew style` and `brew readall` over a Homebrew tap repository, behind one `Style` job; it needs no secrets | — |
+| `.github/workflows/homebrew-bump.yml` | A reusable workflow that bumps a tap's cask to a release by a merged pull request; needs the secrets `CHANGESET_VERSION_APP_CLIENT_ID` and `CHANGESET_VERSION_APP_PRIVATE_KEY` | — |
 | `tasks/rust.toml` | A mise task catalog with the standard Rust tasks | [Rust catalog](tasks/README.md#rust-catalog) |
 | `tasks/template.toml` | A mise task catalog: `template:check`, `template:off` and `template:on` | [Template catalog](tasks/README.md#template-catalog) |
 | `policy/` | Rego rules that conftest runs over a repository's workflows | [Workflow policy](policy/README.md) |
