@@ -37,10 +37,26 @@ jobs:
           token: ${{ github.token }}
       # tap-name is the owner and repository without the homebrew- prefix,
       # in lower case, as the action registers the tap.
+      # brew style lints every Ruby and shell file under the paths it gets, and
+      # a tap name stands for the whole repository. Homebrew's style covers the
+      # tap's formula, cask and command directories; the repository's own
+      # scripts, such as its mise tasks, follow the repository's own lints.
       - name: Style
         env:
           TAP: ${{ steps.homebrew.outputs.tap-name }}
-        run: brew style "$TAP"
+        run: |
+          cd "$(brew --repository "$TAP")"
+          paths=()
+          for dir in Formula Casks cmd; do
+            if [[ -d $dir ]]; then
+              paths+=("$dir")
+            fi
+          done
+          if (( ${#paths[@]} == 0 )); then
+            echo "::error::the tap has no Formula, Casks or cmd directory"
+            exit 1
+          fi
+          brew style "${paths[@]}"
       - name: Read every formula and cask
         env:
           TAP: ${{ steps.homebrew.outputs.tap-name }}
