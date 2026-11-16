@@ -157,6 +157,17 @@ jobs:
             gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
               --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
           fi
+          # An older bump of this cask that has not merged edits the same
+          # lines, so it would conflict once this one merges. The newest tag
+          # wins, and the older pull request closes. The title check keeps a
+          # cask whose token starts with this one's token out of the match.
+          current=$(gh pr view "$branch" --json number --jq .number)
+          gh pr list --state open --limit 100 --json number,headRefName,title \
+            | jq -r --arg prefix "bump/${CASK}-" --arg title "${CASK}: bump to " --argjson current "$current" \
+              '.[] | select(.number != $current and (.headRefName | startswith($prefix)) and (.title | startswith($title))) | .number' \
+            | while read -r number; do
+              gh pr close "$number" --delete-branch --comment "Superseded by ${TAG} in #${current}."
+            done
           # The ruleset's required checks run on the new pull request, so
           # the merge waits for them instead of failing.
           gh pr merge "$branch" --auto --squash --delete-branch

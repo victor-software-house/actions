@@ -66,10 +66,13 @@ So the bump opens and merges its pull request as the App.
 5. It rewrites the cask's `version` and `sha256` lines and checks that both changed.
 6. It commits on `bump/<cask>-<version>` as `github-actions[bot]` and pushes the branch.
 7. It opens a pull request whose body links the release, unless the branch already has an open one.
+   It closes every other open pull request of the cask's earlier bumps, with a comment that names the new tag, and deletes their branches.
    It then enables auto-merge with squash.
    The merge waits for the required checks, so the step does not fail while they run.
 
 One bump per cask runs at a time, and a running one is never cancelled.
 Only the newest queued run is kept, and a newer one cancels the older pending run.
 That is fine, because the newest tag wins.
+The same rule covers a bump whose pull request is still open when the next one runs: auto-merge returns before the merge, so the run frees the group early.
+The next run closes the older pull request instead of leaving two that edit the same lines.
 Every input reaches the shell through `env:`.
