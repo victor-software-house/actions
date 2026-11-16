@@ -1,0 +1,222 @@
+# The reusable Homebrew bump workflow points one cask of a tap at a release
+# of its app: it sets the cask's version and the sha256 of the release asset,
+# then opens and merges a pull request. The caller runs it from a release
+# job, a schedule or a dispatch, and passes the release's tag.
+#
+# The tap's default branch takes changes only through a pull request, and
+# the workflow token may not open one, so the bump opens and merges its pull
+# request as the Version Packages App. The caller passes that App's two
+# organization secrets, and the App is installed on the tap and on the
+# repository that holds the release.
+name: Homebrew bump
+
+on:
+  workflow_call:
+    inputs:
+      cask:
+        description: The cask's token; the file is Casks/<cask>.rb
+        type: string
+        required: true
+      source-repository:
+        description: The release's repository, as owner/name, in the tap's owner
+        type: string
+        required: true
+      tag:
+        description: The release tag to bump to
+        type: string
+        required: true
+      tag-pattern:
+        description: Bash extended regular expression the tag must match; its first capture group is the version
+        type: string
+        default: ^v([0-9]+\.[0-9]+\.[0-9]+)$
+      asset:
+        description: The release asset's file name
+        type: string
+        required: true
+      runner:
+        description: Final runner label for the job
+        type: string
+        default: ubuntu-26.04
+    secrets:
+      CHANGESET_VERSION_APP_CLIENT_ID:
+        description: The Version Packages App's client ID
+        required: true
+      CHANGESET_VERSION_APP_PRIVATE_KEY:
+        description: The Version Packages App's private key
+        required: true
+
+permissions:
+  contents: read
+
+# One bump per cask at a time, and a queued one waits. The group's prefix
+# keeps it apart from any group the caller names.
+concurrency:
+  group: homebrew-bump-${{ inputs.cask }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      CASK: ${{ inputs.cask }}
+      SOURCE_REPOSITORY: ${{ inputs.source-repository }}
+      TAG: ${{ inputs.tag }}
+      TAG_PATTERN: ${{ inputs.tag-pattern }}
+      ASSET: ${{ inputs.asset }}
+    steps:
+      - name: Check the inputs
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! $CASK =~ ^[a-z0-9][a-z0-9@._+-]*$ ]]; then
+            echo "::error::cask is not a cask token (got '${CASK}')"
+            exit 1
+          fi
+          if [[ ! $SOURCE_REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::source-repository is not owner/name (got '${SOURCE_REPOSITORY}')"
+            exit 1
+          fi
+          if [[ ! $TAG =~ $TAG_PATTERN ]]; then
+            echo "::error::tag does not match ${TAG_PATTERN} (got '${TAG}')"
+            exit 1
+          fi
+          version=${BASH_REMATCH[1]-}
+          if [[ ! $version =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+            echo "::error::the pattern's first capture group is not a version (got '${version}')"
+            exit 1
+          fi
+          {
+            echo "version=${version}"
+            echo "source-name=${SOURCE_REPOSITORY#*/}"
+          } >> "$GITHUB_OUTPUT"
+      # Two tokens, each with the least access its steps need: the tap's
+      # checkout, push and pull request, and the source repository's release.
+      - name: Mint the tap token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.CHANGESET_VERSION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CHANGESET_VERSION_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Mint the source token
+        id: source-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.CHANGESET_VERSION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CHANGESET_VERSION_APP_PRIVATE_KEY }}
+          repositories: ${{ steps.target.outputs.source-name }}
+          permission-contents: read
+      # The App's token stays in the checkout's git config, which the push
+      # below needs.
+      - name: Check out the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Bump the cask
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_TOKEN: ${{ steps.source-token.outputs.token }}
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          file="Casks/${CASK}.rb"
+          # The newest version wins, by sort -V over the captured version.
+          # A late run of an older tag defers to the cask's version on the
+          # default branch and to every open bump of the cask, and writes
+          # nothing.
+          newer() {
+            [[ $1 != "$2" && $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1) == "$1" ]]
+          }
+          # Sets cask_version to the cask's version at the default branch's
+          # tip, whatever ref the caller's run checked out.
+          default=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          read_tip() {
+            git fetch --quiet origin "+refs/heads/${default}:refs/remotes/origin/${default}"
+            cask_version=$(git show "origin/${default}:${file}" | sed -n 's|^  version "\(.*\)"$|\1|p')
+            if [[ -z $cask_version ]]; then
+              echo "::error::${file} has no version line"
+              exit 1
+            fi
+          }
+          read_tip
+          if [[ $cask_version == "$VERSION" ]]; then
+            echo "already at ${VERSION}"
+            exit 0
+          fi
+          if ! newer "$VERSION" "$cask_version"; then
+            echo "::notice::${CASK} ${VERSION} is not newer than ${cask_version} on the default branch, so nothing changes."
+            exit 0
+          fi
+          # The title check keeps a cask whose token starts with this one's
+          # token out of the match. An open pull request at this version is
+          # this run's own, from an earlier attempt, and is reused below.
+          open_bumps=$(gh pr list --state open --limit 100 --json number,headRefName,title \
+            | jq -r --arg prefix "bump/${CASK}-" --arg title "${CASK}: bump to " \
+              '.[] | select((.headRefName | startswith($prefix)) and (.title | startswith($title))) | "\(.number) \(.headRefName | ltrimstr($prefix))"')
+          older=()
+          while read -r number other; do
+            [[ -n $number ]] || continue
+            [[ $other == "$VERSION" ]] && continue
+            if ! newer "$VERSION" "$other"; then
+              echo "::notice::${CASK} ${VERSION} is not newer than ${other}, which has open pull request #${number}, so nothing changes."
+              exit 0
+            fi
+            older+=("$number")
+          done <<<"$open_bumps"
+          # The release's own digest, checked against the downloaded file.
+          # Only the release reads use the source repository's token.
+          GH_TOKEN="$SOURCE_TOKEN" gh release download "$TAG" -R "$SOURCE_REPOSITORY" -p "$ASSET" -D "$RUNNER_TEMP"
+          sha=$(sha256sum "$RUNNER_TEMP/$ASSET" | cut -d' ' -f1)
+          digest=$(GH_TOKEN="$SOURCE_TOKEN" gh release view "$TAG" -R "$SOURCE_REPOSITORY" --json assets | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest')
+          if [[ $digest != "sha256:${sha}" ]]; then
+            echo "::error::${ASSET} digest ${digest} does not match the download (${sha})"
+            exit 1
+          fi
+          # An older bump of this cask that has not merged edits the same
+          # lines, so it would conflict with this one. One that merged since
+          # the list was read is already in the default branch, which the
+          # tip check below reads.
+          for number in "${older[@]}"; do
+            if ! gh pr close "$number" --delete-branch --comment "Superseded by ${TAG}."; then
+              state=$(gh pr view "$number" --json state --jq .state)
+              if [[ $state == OPEN ]]; then
+                echo "::error::Could not close pull request #${number}"
+                exit 1
+              fi
+              echo "::notice::Pull request #${number} is ${state}, so it stays."
+            fi
+          done
+          # The bump commit goes on the default branch's current tip, so a
+          # bump that merged meanwhile is part of what this one edits.
+          read_tip
+          if [[ $cask_version == "$VERSION" ]] || ! newer "$VERSION" "$cask_version"; then
+            echo "::notice::${CASK} is at ${cask_version} on the default branch, so ${VERSION} changes nothing."
+            exit 0
+          fi
+          branch="bump/${CASK}-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -C "$branch" "origin/${default}"
+          sed -i "s|^  version \".*\"$|  version \"${VERSION}\"|; s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" "$file"
+          grep -qxF "  version \"${VERSION}\"" "$file"
+          grep -qxF "  sha256 \"${sha}\"" "$file"
+          git add "$file"
+          git commit -m "${CASK}: bump to ${VERSION}"
+          git push --force origin "$branch"
+          # A rerun reuses the pull request its earlier attempt opened.
+          open=$(gh pr list --head "$branch" --state open --json number --jq length)
+          if [[ $open -eq 0 ]]; then
+            gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
+              --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+          fi
+          # The ruleset's required checks run on the pull request, so the
+          # merge waits for them instead of failing.
+          gh pr merge "$branch" --auto --squash --delete-branch
