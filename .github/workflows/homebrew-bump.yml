@@ -94,17 +94,25 @@ jobs:
             echo "version=${version}"
             echo "source-name=${SOURCE_REPOSITORY#*/}"
           } >> "$GITHUB_OUTPUT"
-      - name: Mint the bump token
+      # Two tokens, each with the least access its steps need: the tap's
+      # checkout, push and pull request, and the source repository's release.
+      - name: Mint the tap token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ secrets.CHANGESET_VERSION_APP_CLIENT_ID }}
           private-key: ${{ secrets.CHANGESET_VERSION_APP_PRIVATE_KEY }}
-          repositories: |
-            ${{ github.event.repository.name }}
-            ${{ steps.target.outputs.source-name }}
+          repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-pull-requests: write
+      - name: Mint the source token
+        id: source-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.CHANGESET_VERSION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CHANGESET_VERSION_APP_PRIVATE_KEY }}
+          repositories: ${{ steps.target.outputs.source-name }}
+          permission-contents: read
       # The App's token stays in the checkout's git config, which the push
       # below needs.
       - name: Check out the tap
@@ -115,6 +123,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_TOKEN: ${{ steps.source-token.outputs.token }}
           VERSION: ${{ steps.target.outputs.version }}
         run: |
           set -euo pipefail
@@ -124,9 +133,10 @@ jobs:
             exit 0
           fi
           # The release's own digest, checked against the downloaded file.
-          gh release download "$TAG" -R "$SOURCE_REPOSITORY" -p "$ASSET" -D "$RUNNER_TEMP"
+          # Only the release reads use the source repository's token.
+          GH_TOKEN="$SOURCE_TOKEN" gh release download "$TAG" -R "$SOURCE_REPOSITORY" -p "$ASSET" -D "$RUNNER_TEMP"
           sha=$(sha256sum "$RUNNER_TEMP/$ASSET" | cut -d' ' -f1)
-          digest=$(gh release view "$TAG" -R "$SOURCE_REPOSITORY" --json assets | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest')
+          digest=$(GH_TOKEN="$SOURCE_TOKEN" gh release view "$TAG" -R "$SOURCE_REPOSITORY" --json assets | jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest')
           if [[ $digest != "sha256:${sha}" ]]; then
             echo "::error::${ASSET} digest ${digest} does not match the download (${sha})"
             exit 1
@@ -141,6 +151,12 @@ jobs:
           git add "$file"
           git commit -m "${CASK}: bump to ${VERSION}"
           git push --force origin "$branch"
-          gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
-            --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
-          gh pr merge "$branch" --squash --delete-branch
+          # A re-run finds the pull request its first run opened.
+          open=$(gh pr list --head "$branch" --state open --json number --jq length)
+          if [[ $open -eq 0 ]]; then
+            gh pr create --head "$branch" --title "${CASK}: bump to ${VERSION}" \
+              --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+          fi
+          # The ruleset's required checks run on the new pull request, so
+          # the merge waits for them instead of failing.
+          gh pr merge "$branch" --auto --squash --delete-branch

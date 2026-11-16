@@ -26,8 +26,9 @@ jobs:
 The caller contract:
 
 - The Version Packages App is installed on the tap and on the source repository.
-  The workflow mints one token for both, with `contents: write` and `pull-requests: write`.
-- The source repository has the tap's owner, because the token is requested for repository names under that owner.
+  The workflow mints a token for the tap with `contents: write` and `pull-requests: write`, and one for the source repository with `contents: read`.
+- The source repository has the tap's owner, because the tokens are requested for repository names under that owner.
+- The tap allows auto-merge in its settings, because the workflow enables it on the pull request.
 - The caller passes both secrets.
 - The caller's own concurrency group, if it has one, is not named `homebrew-bump-<cask>`, which the workflow holds.
 
@@ -56,12 +57,18 @@ So the bump opens and merges its pull request as the App.
 
 1. The job checks that `cask` is a cask token, that `source-repository` is `owner/name`, and that the tag matches `tag-pattern`.
    The pattern's first capture group must hold a version.
-2. It mints the App token and checks out the tap with it.
+2. It mints two App tokens and checks out the tap with the first.
+   The tap token has `contents: write` and `pull-requests: write` on the tap alone, and serves the checkout, the push and the pull request.
+   The source token has `contents: read` on the source repository alone, and serves only the release reads.
 3. It stops with success when the cask already has the version.
 4. It downloads the asset with `gh` and fails unless its sha256 matches the digest the release lists for it.
 5. It rewrites the cask's `version` and `sha256` lines and checks that both changed.
 6. It commits on `bump/<cask>-<version>` as `github-actions[bot]` and pushes the branch.
-7. It opens a pull request whose body links the release, and squash-merges it, deleting the branch.
+7. It opens a pull request whose body links the release, unless the branch already has an open one.
+   It then enables auto-merge with squash and branch deletion.
+   The merge waits for the required checks, so the step does not fail while they run.
 
-One bump per cask runs at a time, and a queued one waits instead of cancelling the running one.
+One bump per cask runs at a time, and a running one is never cancelled.
+Only the newest queued run is kept, and a newer one cancels the older pending run.
+That is fine, because the newest tag wins.
 Every input reaches the shell through `env:`.
