@@ -62,17 +62,37 @@ So the bump opens and merges its pull request as the App.
    The tap token has `contents: write` and `pull-requests: write` on the tap alone, and serves the checkout, the push and the pull request.
    The source token has `contents: read` on the source repository alone, and serves only the release reads.
 3. It stops with success when the cask already has the version.
-4. It downloads the asset with `gh` and fails unless its sha256 matches the digest the release lists for it.
-5. It rewrites the cask's `version` and `sha256` lines and checks that both changed.
-6. It commits on `bump/<cask>-<version>` as `github-actions[bot]` and pushes the branch.
-7. It opens a pull request whose body links the release, unless the branch already has an open one.
-   It closes every other open pull request of the cask's earlier bumps, with a comment that names the new tag, and deletes their branches.
+4. It compares versions.
+   It goes on only when its version is newer than the cask's version on the default branch.
+   It must also be newer than the version of every other open bump pull request of the cask.
+   Otherwise it writes a `::notice::` that names the newer version, changes nothing and stops with success.
+   So a late run of an old tag is not an error, and a version equal to an open bump's leaves that pull request alone.
+5. It downloads the asset with `gh` and fails unless its sha256 matches the digest the release lists for it.
+6. It rewrites the cask's `version` and `sha256` lines and checks that both changed.
+7. It commits on `bump/<cask>-<version>` as `github-actions[bot]` and pushes the branch.
+8. It opens a pull request whose body links the release.
+   It closes every other open bump pull request of the cask, which step 4 found older, with a comment that names the new tag, and deletes their branches.
    It then enables auto-merge with squash.
    The merge waits for the required checks, so the step does not fail while they run.
+
+Every input reaches the shell through `env:`.
+
+## Version order
+
+Versions compare with `sort -V` over the first capture group of `tag-pattern`.
+It orders `vX.Y.Z` tags correctly.
+
+A caller whose versions `sort -V` orders wrongly, such as `1.2-3` against `1.2`, must dispatch them in order.
+The workflow cannot tell a newer one from an older one.
+
+An open bump of the same cask matches by its branch prefix `bump/<cask>-` and its title prefix `<cask>: bump to `.
+So a cask whose token starts with another's is not mistaken for it.
+
+## Concurrency
 
 One bump per cask runs at a time, and a running one is never cancelled.
 Only the newest queued run is kept, and a newer one cancels the older pending run.
 That is fine, because the newest tag wins.
-The same rule covers a bump whose pull request is still open when the next one runs: auto-merge returns before the merge, so the run frees the group early.
-The next run closes the older pull request instead of leaving two that edit the same lines.
-Every input reaches the shell through `env:`.
+Auto-merge returns before the merge, so a run frees the group while its pull request is still open.
+The next run then finds that pull request, and closes it when its own version is newer.
+That keeps two pull requests that edit the same lines from standing open.
