@@ -185,12 +185,14 @@ jobs:
           # the list was read is already in the default branch, which the
           # tip check below reads.
           for number in "${older[@]}"; do
-            state=$(gh pr view "$number" --json state --jq .state)
-            if [[ $state != OPEN ]]; then
+            if ! gh pr close "$number" --delete-branch --comment "Superseded by ${TAG}."; then
+              state=$(gh pr view "$number" --json state --jq .state)
+              if [[ $state == OPEN ]]; then
+                echo "::error::Could not close pull request #${number}"
+                exit 1
+              fi
               echo "::notice::Pull request #${number} is ${state}, so it stays."
-              continue
             fi
-            gh pr close "$number" --delete-branch --comment "Superseded by ${TAG}."
           done
           # The bump commit goes on the default branch's current tip, so a
           # bump that merged meanwhile is part of what this one edits.

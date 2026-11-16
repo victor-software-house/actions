@@ -71,7 +71,7 @@ So the bump opens and merges its pull request as the App.
    An open pull request at the run's own version is its earlier attempt's, and step 9 reuses it.
 5. It downloads the asset with `gh` and fails unless its sha256 matches the digest the release lists for it.
 6. It closes the open bump pull requests that step 4 found older, with a comment that names the new tag, and deletes their branches.
-   It checks each one's state first, and leaves one that is not open, with a notice.
+   A pull request that merged meanwhile fails to close, and the run leaves it with a notice.
 7. It fetches the default branch again and reads the cask's version at its tip.
    It stops with a notice when the cask is already at or past this version, as when an older bump merged since step 3.
 8. It commits on `bump/<cask>-<version>`, built on that tip, as `github-actions[bot]`.
