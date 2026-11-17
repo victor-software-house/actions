@@ -18,6 +18,19 @@ paths:
       - missing-timeout
       # mise-action renders cache_key as a Handlebars template.
       - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
+  .github/workflows/swift-ci.yml:
+    ignore:
+      # The build job's steps each set their own timeout, and the task steps
+      # take the caller's timeout-minutes input.
+      - missing-timeout
+      # mise-action renders cache_key as a Handlebars template.
+      - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
+  .github/workflows/go-ci.yml:
+    ignore:
+      # As in swift-ci.yml: every step of the build job sets its own timeout.
+      - missing-timeout
+      # mise-action renders cache_key as a Handlebars template.
+      - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
   mise/action.yml:
     ignore:
       # The step refuses a mirror-url holding any character outside
