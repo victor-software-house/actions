@@ -218,5 +218,7 @@ jobs:
               --body "${CASK} ${TAG}: https://github.com/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
           fi
           # The ruleset's required checks run on the pull request, so the
-          # merge waits for them instead of failing.
-          gh pr merge "$branch" --auto --squash --delete-branch
+          # merge waits for them instead of failing. A merge queue refuses
+          # --delete-branch and sets the method itself, so the tap's
+          # delete_branch_on_merge setting removes the branch.
+          gh pr merge "$branch" --auto --squash
