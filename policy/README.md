@@ -45,7 +45,7 @@ A job that writes maps its own scopes.
 
 ### workflow_pins
 
-Every `uses:` names a full commit SHA and a version comment, `# v1.2.3` or `# main, <date>`.
+Every `uses:` names a full commit SHA and a version comment, `# v1.2.3`, a semver prerelease such as `# v1.2.3-rc.1`, or `# main, <date>`.
 
 ### workflow_mise_env
 
