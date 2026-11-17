@@ -1,0 +1,24 @@
+name: Kody merge group
+
+# Kody, the Kodus review app, posts the required Kody Code Review check on
+# pull requests only, so a merge queue entry would wait for it forever. This
+# workflow reports the check for a merge group, which carries the diff Kody
+# reviewed on the pull request.
+on:
+  merge_group:
+
+permissions: {}
+
+# One group for each merge group, so no entry's run cancels another's.
+concurrency:
+  group: kody-${{ github.event.merge_group.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  kody:
+    name: Kody Code Review
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    steps:
+      - name: Report the check
+        run: echo "Kody reviewed the pull request; this merge group carries that diff."

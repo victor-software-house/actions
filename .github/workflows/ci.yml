@@ -4,6 +4,8 @@ on:
   # A draft pull request runs no CI; marking it ready starts the run.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  # A merge queue entry runs the same gate on the merge group's commit.
+  merge_group:
   push:
     branches: [main]
   # Runs the same gate on demand on any branch: gh workflow run ci.yml --ref <branch>
