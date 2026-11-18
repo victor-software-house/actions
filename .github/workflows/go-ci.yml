@@ -98,19 +98,37 @@ jobs:
           DOCS: ${{ steps.filter.outputs.docs_count }}
           DOCS_FILES: ${{ steps.filter.outputs.docs_files }}
         run: |
+          # A //go:embed line names files with no quotes, as a directory or a
+          # glob, relative to its own package, and a package embeds only files
+          # in its own directory or below. So a Go source with such a line, in
+          # the file's directory or a directory above it, may embed the file.
+          embeds() {
+            local dir=$1
+            while :; do
+              if git grep -q '^//go:embed' -- ":(glob)${dir:+$dir/}*.go"; then
+                return 0
+              fi
+              if [ -z "$dir" ]; then
+                return 1
+              fi
+              case $dir in
+                */*) dir=${dir%/*} ;;
+                *) dir='' ;;
+              esac
+            done
+          }
           build=false
           if [ "$ALL" != "$DOCS" ]; then
             build=true
           else
             while IFS= read -r file; do
               # A source names the file by its path from the root, as a test
-              # run there does, or by a relative path that ends in it. A
-              # //go:embed line names it with no quotes, and may name only
-              # the directory that holds it or a glob, so any such line that
-              # names the file's top directory or holds a * counts too.
-              top=${file%%/*}
-              if git grep -qF -e "$file" -- '*.go' \
-                || git grep -qE "^//go:embed( |.* )(all:)?(${top}([/ ]|$)|[^ ]*[*])" -- '*.go'; then
+              # run there does, or by a relative path that ends in it.
+              case $file in
+                */*) dir=${file%/*} ;;
+                *) dir='' ;;
+              esac
+              if git grep -qF -e "$file" -- '*.go' || embeds "$dir"; then
                 echo "A source reads $file, so the build reads it."
                 build=true
                 break

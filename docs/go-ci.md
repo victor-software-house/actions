@@ -56,7 +56,7 @@ So the check reports on a documentation-only pull request and in a merge group.
 Documentation is the root's Markdown files, `docs/` and `openspec/`.
 A pull request that changes only documentation skips `Build and test`.
 A documentation file still counts as a build input when a Go source names its path anywhere, in a string or a raw string.
-A `//go:embed` line counts when it names the file, the top directory that holds it, or a glob.
+A Go source with a `//go:embed` line counts too, when it sits in the file's directory or a directory above it, since a package embeds only files below its own directory.
 Any other event runs the build: a merge group, a push and a dispatch have no `Changes` job, and so do a pull request whose `Changes` job failed.
 
 ## Caches
