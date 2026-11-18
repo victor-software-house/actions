@@ -104,9 +104,13 @@ jobs:
           else
             while IFS= read -r file; do
               # A source names the file by its path from the root, as a test
-              # run there does, or by a relative path that ends in it; a
-              # //go:embed line names it with no quotes at all.
-              if git grep -qF -e "$file" -- '*.go'; then
+              # run there does, or by a relative path that ends in it. A
+              # //go:embed line names it with no quotes, and may name only
+              # the directory that holds it or a glob, so any such line that
+              # names the file's top directory or holds a * counts too.
+              top=${file%%/*}
+              if git grep -qF -e "$file" -- '*.go' \
+                || git grep -qE "^//go:embed( |.* )(all:)?(${top}([/ ]|$)|[^ ]*[*])" -- '*.go'; then
                 echo "A source reads $file, so the build reads it."
                 build=true
                 break
