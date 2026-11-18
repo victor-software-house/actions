@@ -13,8 +13,6 @@ Each piece lives here once, and every repository that uses it pins one commit.
 | `macos-signing/` | Actions that load and remove the macOS signing identities | [macos-signing](macos-signing/README.md) |
 | `.github/workflows/rust-ci.yml` | A reusable workflow: Rust build, tests and checks behind one `Verify` job | [Rust CI](docs/rust-ci.md) |
 | `.github/workflows/bun-ci.yml` | A reusable workflow: a Bun repository's `mise run verify` behind one `Verify` job | [Bun CI](docs/bun-ci.md) |
-| `.github/workflows/swift-ci.yml` | A reusable workflow: a Swift package's mise task behind one `Verify` job, with SwiftPM caches | [Swift CI](docs/swift-ci.md) |
-| `.github/workflows/go-ci.yml` | A reusable workflow: a Go module's mise task behind one `Verify` job, with Go caches | [Go CI](docs/go-ci.md) |
 | `.github/workflows/template-check.yml` | A reusable workflow that fails when a newer template tag would change the repository | [Template check](docs/template-check.md) |
 | `.github/workflows/secrets.yml` | A reusable workflow that scans commits for credentials with gitleaks | [Secrets scan](docs/secrets.md) |
 | `.github/workflows/homebrew-tap-ci.yml` | A reusable workflow: `brew style` and `brew readall` over a Homebrew tap repository, behind one `Style` job; it needs no secrets | [Homebrew tap CI](docs/homebrew-tap-ci.md) |
