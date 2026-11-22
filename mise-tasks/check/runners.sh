@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Shared workflows consume final infrastructure inputs without runtime visibility policy"
 set -euo pipefail
-workflows=(.github/workflows/rust-ci.yml .github/workflows/bun-ci.yml .github/workflows/template-check.yml .github/workflows/secrets.yml)
+workflows=(.github/workflows/rust-ci.yml .github/workflows/bun-ci.yml .github/workflows/template-check.yml .github/workflows/secrets.yml .github/workflows/nix-host.yml)
 if grep -nE 'github\.event\.repository\.private|nscloud-(ubuntu|macos)|namespace-(4x8|8x16|16x32)|cheapest|needs\.runner' "${workflows[@]}"; then
   echo 'shared workflows must consume final caller configuration' >&2
   exit 1
@@ -11,7 +11,7 @@ for file in .github/workflows/rust-ci.yml .github/workflows/bun-ci.yml; do
   yq -e '.on.workflow_call.inputs."build-runner".type == "string" and .on.workflow_call.inputs.runner == null' "$file" >/dev/null
   yq -e '.on.workflow_call.inputs.light-runner.default == "ubuntu-26.04"' "$file" >/dev/null
 done
-for file in .github/workflows/template-check.yml .github/workflows/secrets.yml; do
+for file in .github/workflows/template-check.yml .github/workflows/secrets.yml .github/workflows/nix-host.yml; do
   yq -e '.on.workflow_call.inputs.runner.type == "string"' "$file" >/dev/null
 done
 
