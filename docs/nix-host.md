@@ -27,6 +27,7 @@ jobs:
       cache-store: <the cache's s3:// store URL>
       substituter: <the cache's read URL>
       trusted-public-key: <the cache's public key>
+      environment: ${{ github.event_name == 'merge_group' && 'nix-cache' || '' }}
     secrets:
       NIX_CACHE_ACCESS_KEY_ID: ${{ secrets.NIX_CACHE_ACCESS_KEY_ID }}
       NIX_CACHE_SECRET_ACCESS_KEY: ${{ secrets.NIX_CACHE_SECRET_ACCESS_KEY }}
@@ -35,6 +36,9 @@ jobs:
 
 - The job needs only `contents: read`.
 - A pull request passes no secrets and builds with the cache as a substituter, so it writes nothing.
+- The upload secrets live in a GitHub environment, whose branch rules decide which refs can read them.
+  A job that calls a reusable workflow cannot set `environment`, so the called job does, from the `environment` input.
+  The caller passes the environment's name only for a merge queue entry, and an empty string otherwise.
 
 ## Inputs
 
@@ -46,6 +50,7 @@ jobs:
 | `cache-store` | empty | The cache's `s3://` store URL, with its endpoint and region as query parameters and no credentials; required when `upload` is true |
 | `substituter` | empty | The cache's read URL; empty adds no substituter |
 | `trusted-public-key` | empty | The public key that verifies the cache's signatures; empty adds no key |
+| `environment` | empty | The GitHub environment that holds the upload secrets; empty uses none |
 | `timeout-minutes` | `30` | Cancels a hung build |
 
 ## Secrets

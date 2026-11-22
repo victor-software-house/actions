@@ -13,6 +13,7 @@
 #         cache-store: <the cache's s3:// store URL>
 #         substituter: <the cache's read URL>
 #         trusted-public-key: <the cache's public key>
+#         environment: ${{ github.event_name == 'merge_group' && 'nix-cache' || '' }}
 #       secrets:
 #         NIX_CACHE_ACCESS_KEY_ID: ${{ secrets.NIX_CACHE_ACCESS_KEY_ID }}
 #         NIX_CACHE_SECRET_ACCESS_KEY: ${{ secrets.NIX_CACHE_SECRET_ACCESS_KEY }}
@@ -51,6 +52,10 @@ on:
         description: The public key that verifies the cache's signatures; empty adds no key
         type: string
         default: ""
+      environment:
+        description: The GitHub environment that holds the upload secrets; empty uses none
+        type: string
+        default: ""
       timeout-minutes:
         description: Cancels a hung build
         type: number
@@ -75,6 +80,10 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ${{ fromJSON(inputs.runner) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    # A job that calls a reusable workflow cannot set an environment, so the
+    # called job does, to read the environment's secrets. An empty name uses
+    # no environment.
+    environment: ${{ inputs.environment }}
     permissions:
       contents: read
     steps:
