@@ -73,6 +73,7 @@ Nix flake inputs are off, because the runner has no nix.
 - In a public run, each Renovate job's token reaches only the repository it updates.
   Lookups of private sources then fail, so a public run leaves Copier templates to each repository's daily Template check.
 - In a private run, each Renovate job's token reaches every repository, for private sources such as the Copier templates.
+- A dry run's tokens can only read.
 
 ## Caches
 

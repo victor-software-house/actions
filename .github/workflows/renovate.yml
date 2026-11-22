@@ -150,7 +150,10 @@ jobs:
           RENOVATE_MIN_COMMITS: ${{ inputs.min-commits }}
           RENOVATE_LIMIT: ${{ inputs.limit }}
           RENOVATE_EXCLUDE: ${{ inputs.exclude }}
-        run: echo "matrix=$(mise run --quiet renovate:matrix)" >>"$GITHUB_OUTPUT"
+        # An assignment, so a failing task fails the step.
+        run: |
+          matrix=$(mise run --quiet renovate:matrix)
+          echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
 
   renovate:
     name: Renovate ${{ matrix.name }}
@@ -181,6 +184,7 @@ jobs:
       # A public run's token reaches only the repository it updates. A
       # private run's token reaches every repository, because private
       # repositories look up private sources, such as the Copier templates.
+      # A dry run's token can only read.
       - name: Create App installation token
         id: app-token
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
@@ -190,13 +194,13 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ inputs.visibility == 'public' && matrix.name || '' }}
           permission-administration: read
-          permission-checks: write
-          permission-contents: write
-          permission-issues: write
-          permission-pull-requests: write
-          permission-statuses: write
+          permission-checks: ${{ inputs.dry-run && 'read' || 'write' }}
+          permission-contents: ${{ inputs.dry-run && 'read' || 'write' }}
+          permission-issues: ${{ inputs.dry-run && 'read' || 'write' }}
+          permission-pull-requests: ${{ inputs.dry-run && 'read' || 'write' }}
+          permission-statuses: ${{ inputs.dry-run && 'read' || 'write' }}
           permission-vulnerability-alerts: read
-          permission-workflows: write
+          permission-workflows: ${{ inputs.dry-run && 'read' || 'write' }}
 
       - name: Install tools
         uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
@@ -215,9 +219,9 @@ jobs:
           key: bun-${{ hashFiles('renovate/bun.lock') }}
 
       # Renovate's repository cache lets a run skip work whose inputs did not
-      # change. Each repository keeps its own.
-      - name: Cache Renovate state
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # change. Each repository keeps its own, and a dry run saves none.
+      - name: Restore Renovate state
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/renovate/cache/renovate/repository
           key: renovate-${{ matrix.name }}-${{ github.run_id }}
@@ -232,3 +236,10 @@ jobs:
           RENOVATE_VISIBILITY: ${{ inputs.visibility }}
           LOG_LEVEL: info
         run: mise run ${{ inputs.dry-run && 'renovate:dry-run' || 'renovate' }}
+
+      - name: Save Renovate state
+        if: ${{ !inputs.dry-run }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /tmp/renovate/cache/renovate/repository
+          key: renovate-${{ matrix.name }}-${{ github.run_id }}
