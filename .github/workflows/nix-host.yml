@@ -148,7 +148,7 @@ jobs:
           (umask 077 && printf '%s' "$SIGNING_KEY" >"$key_file")
           chmod 600 "$key_file"
 
-          # A binary cache refuses a path whose references it does not have, so
+          # A binary cache rejects a path whose references it does not have, so
           # the whole closure goes up. nix copy skips the paths the cache has.
           nix store sign --recursive --key-file "$key_file" ./result
           AWS_ACCESS_KEY_ID="$ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS_KEY" \

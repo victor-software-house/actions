@@ -69,7 +69,7 @@ The first step fails the job with an error when `upload` is true and `cache-stor
 1. `nix store sign --recursive --key-file` signs the closure of the built system.
    The key is written to a mode 600 file under `RUNNER_TEMP`, and the step removes it when it exits.
 2. `nix copy --to <cache-store>` uploads the closure.
-   A binary cache refuses a path whose references it does not have, so the paths cache.nixos.org serves go up too.
+   A binary cache rejects a path whose references it does not have, so the paths cache.nixos.org serves go up too.
    nix copy skips every path the cache already has, so a later run uploads only what changed.
    The access key and secret key are `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for that command only.
 3. The step prints the number of paths in the closure.
