@@ -139,17 +139,44 @@ printf '%s\n' ${paths[@]+"${paths[@]}"}
 '''
 
 ["template:on"]
-description = "Turns template pieces on and locks their tools, with conflict markers where the repository keeps its own file"
-usage = 'arg "<piece>" var=#true help="A piece to turn on, from the choices of the pieces or pieces_extra question"'
+description = "Turns template pieces on with the answers they need and locks their tools, with conflict markers where the repository keeps its own file"
+usage = '''
+arg "<piece>" var=#true help="A piece to turn on, from the choices of the pieces or pieces_extra question"
+flag "--data <answer>" var=#true help="An answer for a piece being turned on, as key=value; repeat for each"
+'''
 tools = { uv = "0.13.6", python = "3.15.2", yq = "4.54.1" }
 shell = "bash -c"
 # copier update renders the pieces' files over the repository's. A file the
 # repository kept after template:off comes back with inline conflict markers
 # between its copy and the template's, which git diff --check reports.
+# The update takes the answers the repository records, and the template's
+# default for every other question. A piece whose answers have no valid
+# default, such as go_xcframework's xcframework_module, needs --data
+# key=value, and so does any answer that must differ from the default, such as
+# repository in a worktree, which defaults to the worktree's folder name.
 run = '''
 set -euo pipefail
 answers=.copier-answers.yml
 read -ra on <<<"$usage_piece"
+# mise quotes each --data value for the shell, so the array keeps its spaces.
+eval "data=($usage_data)"
+data_args=()
+for answer in "${data[@]+"${data[@]}"}"; do
+  case $answer in
+    *=*) ;;
+    *)
+      echo "template:on: --data $answer is not key=value" >&2
+      exit 1
+      ;;
+  esac
+  case ${answer%%=*} in
+    pieces | pieces_extra)
+      echo "template:on: --data cannot set ${answer%%=*}, which the piece arguments set" >&2
+      exit 1
+      ;;
+  esac
+  data_args+=(--data "$answer")
+done
 src=$(yq '._src_path' "$answers")
 commit=$(yq '._commit' "$answers")
 work=$(mktemp -d)
@@ -172,7 +199,8 @@ for piece in "${on[@]}"; do
 done
 uvx "copier@$copier" update --quiet --defaults --vcs-ref=:current: \
   --data "pieces=$(yq -o json -I0 '.pieces // []' "$work/answers.yml")" \
-  --data "pieces_extra=$(yq -o json -I0 '.pieces_extra // []' "$work/answers.yml")"
+  --data "pieces_extra=$(yq -o json -I0 '.pieces_extra // []' "$work/answers.yml")" \
+  ${data_args[@]+"${data_args[@]}"}
 if ! git diff --check; then
   echo "template:on: resolve the conflict markers above, where the repository kept its own file" >&2
   exit 1
