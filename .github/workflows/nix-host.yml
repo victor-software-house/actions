@@ -122,7 +122,8 @@ jobs:
       # path to its info, or to null when the store does not have it.
       # Only the signing step reads the key, from a file only the runner
       # user can read that the trap removes, and only the copy gets the
-      # credentials.
+      # credentials. The copy is not recursive: it
+      # skips references that cache.nixos.org serves, which clients fetch there.
       - name: Upload the paths cache.nixos.org lacks
         if: inputs.upload
         shell: bash
@@ -152,5 +153,5 @@ jobs:
           nix store sign --key-file "$key_file" "${missing[@]}"
           nar_bytes=$(nix path-info --json --json-format 1 "${missing[@]}" | jq '[.[].narSize] | add')
           AWS_ACCESS_KEY_ID="$ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS_KEY" \
-            nix copy --to "$CACHE_STORE" "${missing[@]}"
+            nix copy --no-recursive --to "$CACHE_STORE" "${missing[@]}"
           echo "Uploaded ${#missing[@]} of ${#closure[@]} paths, $nar_bytes bytes of NAR ($(numfmt --to=iec-i --suffix=B "$nar_bytes"))."

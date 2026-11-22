@@ -67,7 +67,9 @@ The first step fails the job with an error when `upload` is true and `cache-stor
    The `null` paths are the ones to upload.
 3. `nix store sign --key-file` signs those paths.
    The key is written to a mode 600 file under `RUNNER_TEMP`, and the step removes it when it exits.
-4. `nix copy --to <cache-store>` uploads them, with the access key and secret key as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for that command only.
+4. `nix copy --no-recursive --to <cache-store>` uploads exactly those paths.
+   It leaves out their references that cache.nixos.org serves, which clients fetch there.
+   The access key and secret key are `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for that command only.
 5. The step prints the number of uploaded paths and their total NAR size.
 
 A closure that cache.nixos.org serves whole uploads nothing.
