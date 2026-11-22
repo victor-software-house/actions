@@ -57,10 +57,11 @@ EOF
 chmod +x "$work/bin/uvx" "$work/bin/mise"
 export UVX_ARGS="$work/uvx.args"
 
-# run <piece> <usage_data>: the task's script as mise runs it.
+# run <piece> [usage_data]: the task's script as mise runs it. mise leaves
+# usage_data unset when no --data is given.
 run() {
   rm -f "$UVX_ARGS"
-  (cd "$work/repo" && PATH="$work/bin:$PATH" usage_piece="$1" usage_data="$2" bash "$script") 2>"$work/stderr"
+  (cd "$work/repo" && env PATH="$work/bin:$PATH" usage_piece="$1" ${2+"usage_data=$2"} bash "$script") 2>"$work/stderr"
 }
 fail() {
   printf '✘ %s\n' "$1" >&2
@@ -68,18 +69,19 @@ fail() {
 }
 
 # Each answer is its own --data argument, after pieces and pieces_extra, with
-# its spaces kept.
-run go_xcframework "'xcframework_module=Foo' 'repository=owner/name with space'" || fail "template:on failed with --data: $(cat "$work/stderr")"
+# its spaces and shell characters kept.
+run go_xcframework "'xcframework_module=Foo' 'repository=owner/name with space' 'note=\$(echo x)'" || fail "template:on failed with --data: $(cat "$work/stderr")"
 expected=$(printf '%s\n' \
   copier@9.99.0 update --quiet --defaults --vcs-ref=:current: \
   --data 'pieces=["deny","go_xcframework"]' \
   --data 'pieces_extra=["lint_workflows"]' \
   --data xcframework_module=Foo \
-  --data 'repository=owner/name with space')
+  --data 'repository=owner/name with space' \
+  --data 'note=$(echo x)')
 [ "$(cat "$UVX_ARGS")" = "$expected" ] || fail "copier got other arguments than expected: $(cat "$UVX_ARGS")"
 
 # With no --data the call is what it was before the flag.
-run go_xcframework "" || fail "template:on failed without --data: $(cat "$work/stderr")"
+run go_xcframework || fail "template:on failed without --data: $(cat "$work/stderr")"
 [ "$(grep -c '^--data$' "$UVX_ARGS")" -eq 2 ] || fail "copier got an extra --data: $(cat "$UVX_ARGS")"
 
 # A value without = and the two keys the task sets are rejected before copier runs.
