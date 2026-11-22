@@ -2,7 +2,7 @@
 
 `.github/workflows/nix-host.yml` builds one NixOS system behind one `Build` job.
 It runs `nix flake check -L`, then `nix build -L <attribute> --out-link result`, on a native runner.
-In a run with `upload` set, it then copies the paths that cache.nixos.org does not serve to the host's own Nix cache.
+In a run with `upload` set, it then copies the closure of the built system to the host's own Nix cache.
 
 ## Caller
 
@@ -46,7 +46,7 @@ jobs:
 |:--|:--|:--|
 | `runner` | `["ubuntu-26.04-arm"]` | JSON array of final runner labels for the build |
 | `attribute` | required | The flake attribute to build |
-| `upload` | `false` | Copy the paths cache.nixos.org lacks to the cache after the build |
+| `upload` | `false` | Copy the closure to the cache after the build |
 | `cache-store` | empty | The cache's `s3://` store URL, with its endpoint and region as query parameters and no credentials; required when `upload` is true |
 | `substituter` | empty | The cache's read URL; empty adds no substituter |
 | `trusted-public-key` | empty | The public key that verifies the cache's signatures; empty adds no key |
@@ -66,15 +66,10 @@ The first step fails the job with an error when `upload` is true and `cache-stor
 
 ## Upload
 
-1. `nix path-info -r ./result` lists the closure of the built system.
-2. One `nix path-info --json --json-format 1 --store https://cache.nixos.org` call over the whole list reads each path's entry.
-   The JSON maps a path to its info, or to `null` when cache.nixos.org does not serve it.
-   The `null` paths are the ones to upload.
-3. `nix store sign --key-file` signs those paths.
+1. `nix store sign --recursive --key-file` signs the closure of the built system.
    The key is written to a mode 600 file under `RUNNER_TEMP`, and the step removes it when it exits.
-4. `nix copy --no-recursive --to <cache-store>` uploads exactly those paths.
-   It leaves out their references that cache.nixos.org serves, which clients fetch there.
+2. `nix copy --to <cache-store>` uploads the closure.
+   A binary cache refuses a path whose references it does not have, so the paths cache.nixos.org serves go up too.
+   nix copy skips every path the cache already has, so a later run uploads only what changed.
    The access key and secret key are `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for that command only.
-5. The step prints the number of uploaded paths and their total NAR size.
-
-A closure that cache.nixos.org serves whole uploads nothing.
+3. The step prints the number of paths in the closure.
