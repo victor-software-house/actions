@@ -2,9 +2,24 @@
 // repository in scope inherits it, and a repository may add its own Renovate
 // file to override it.
 //
-// A public run's token reaches only the repository it updates, so lookups of
-// private sources fail there. Copier templates are private, so a public run
-// leaves them to each repository's daily Template check.
+// The platform token writes only to the repository being updated. Lookups of
+// GitHub sources use the read-only RENOVATE_LOOKUP_TOKEN instead.
+const lookupToken = process.env.RENOVATE_LOOKUP_TOKEN;
+// Release notes come through github-changelog. Presets from other
+// repositories would use the platform token; no repository extends one.
+const githubLookups = [
+  'git-refs',
+  'git-tags',
+  'github-changelog',
+  'github-releases',
+  'github-release-attachments',
+  'github-tags',
+  'go',
+];
+
+// The App of a public run is installed on public repositories only, so it
+// cannot read the private Copier templates. A public run leaves them to each
+// repository's daily Template check.
 const publicRun = process.env.RENOVATE_VISIBILITY === 'public';
 
 module.exports = {
@@ -15,6 +30,9 @@ module.exports = {
   // Tools come from mise on the runner (mise.toml beside this file).
   binarySource: 'global',
   repositoryCache: 'enabled',
+  hostRules: lookupToken
+    ? githubLookups.map((hostType) => ({ hostType, matchHost: 'github.com', token: lookupToken }))
+    : [],
   requireConfig: 'optional',
   extends: [
     'config:recommended',
