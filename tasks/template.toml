@@ -158,7 +158,8 @@ run = '''
 set -euo pipefail
 answers=.copier-answers.yml
 read -ra on <<<"$usage_piece"
-# mise quotes each --data value for the shell, so the array keeps its spaces.
+# mise quotes each --data value for the shell, so eval only splits them into
+# words: it runs no value, and the array keeps its spaces.
 eval "data=(${usage_data:-})"
 data_args=()
 for answer in "${data[@]+"${data[@]}"}"; do
