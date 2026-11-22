@@ -203,7 +203,8 @@ jobs:
           permission-pull-requests: ${{ inputs.dry-run && 'read' || 'write' }}
           permission-statuses: ${{ inputs.dry-run && 'read' || 'write' }}
           permission-vulnerability-alerts: read
-          permission-workflows: ${{ inputs.dry-run && 'read' || 'write' }}
+          # The workflows permission has no read level, so a dry run asks for none.
+          permission-workflows: ${{ !inputs.dry-run && 'write' || '' }}
 
       - name: Install tools
         uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
