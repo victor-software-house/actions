@@ -44,4 +44,5 @@ It sits on a merged `main` commit whose CI passed, and never moves.
 | `lint:workflows` | `jactionlint` over the workflows |
 | `check:catalog` | `tasks/rust.toml` matches ctl-core v0.6.28's catalog, apart from the changes [tasks/README.md](tasks/README.md#rust-catalog) lists |
 | `check:policy` | Every rule in `policy/` passes its tests, then the pins rule runs over this repository's workflows |
+| `check:template-on` | `template:on` passes each `--data` answer to `copier update` as its own argument, and rejects a value without `=` and the keys `pieces` and `pieces_extra` |
 | `check:docs-probes` | `check:docs` fails each probe crate that breaks the docs standard, and passes the rest |
