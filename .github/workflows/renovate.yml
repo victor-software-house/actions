@@ -158,6 +158,9 @@ jobs:
   renovate:
     name: Renovate ${{ matrix.name }}
     needs: scope
+    # GitHub refuses a matrix with no entries, so a scope with no repository
+    # skips this job.
+    if: ${{ fromJSON(needs.scope.outputs.matrix).include[0] != null }}
     runs-on: ${{ inputs.runner }}
     # GitHub stops an ubuntu-slim job at 15 minutes.
     timeout-minutes: 14
