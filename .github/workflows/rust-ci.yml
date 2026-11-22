@@ -372,11 +372,10 @@ jobs:
       # The cache only speeds the job up, so its result never decides the
       # job's. continue-on-error also covers the step's post action, which
       # saves the cache: the key is per commit, so a re-run of a cancelled or
-      # finished run is refused with "Unable to reserve cache", which
-      # jdx/mr-boxington-action v1.7.2 does not recognise as a refused save
-      # (its pattern expects @actions/cache 6.2 output, 6.3 prints a workflow
-      # warning) and reports as a failure. A failed step still shows its
-      # error annotation.
+      # finished run is refused with "Unable to reserve cache". The VSH fork
+      # of jdx/mr-boxington-action reports that refusal as a skipped save;
+      # upstream v1.7.4 misses the workflow warning @actions/cache 6.3 prints
+      # and reports a failure. A failed step still shows its error annotation.
       #
       # The runner applies the step's limit to the restore and to the post
       # action's export separately, and a timed-out stage fails under
@@ -391,7 +390,7 @@ jobs:
         if: needs.changes.outputs.build != 'false' && !inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 7
-        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        uses: victor-software-house/mr-boxington-action@535e3459742146fa60f90ac2752e9e524c92e0f7 # v1.7.4-vsh.1
         with:
           working-directory: ${{ inputs.working-directory }}
           github-cache-mode: objects
@@ -410,7 +409,7 @@ jobs:
         if: needs.changes.outputs.build != 'false' && inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 2
-        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        uses: victor-software-house/mr-boxington-action@535e3459742146fa60f90ac2752e9e524c92e0f7 # v1.7.4-vsh.1
         with:
           working-directory: ${{ inputs.working-directory }}
           backend: local
@@ -647,7 +646,7 @@ jobs:
         if: ${{ !inputs.cache-volume }}
         continue-on-error: true
         timeout-minutes: 7
-        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        uses: victor-software-house/mr-boxington-action@535e3459742146fa60f90ac2752e9e524c92e0f7 # v1.7.4-vsh.1
         with:
           working-directory: ${{ inputs.working-directory }}
           github-cache-mode: objects
@@ -659,7 +658,7 @@ jobs:
         if: inputs.cache-volume
         continue-on-error: true
         timeout-minutes: 2
-        uses: jdx/mr-boxington-action@88acf2bb50552c7c508cbac13e5f8c576b95b1de # v1.7.3
+        uses: victor-software-house/mr-boxington-action@535e3459742146fa60f90ac2752e9e524c92e0f7 # v1.7.4-vsh.1
         with:
           working-directory: ${{ inputs.working-directory }}
           backend: local
