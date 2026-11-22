@@ -37,7 +37,7 @@ on:
         type: string
         required: true
       upload:
-        description: Copy the paths cache.nixos.org lacks to the cache after the build
+        description: Copy the closure to the cache after the build
         type: boolean
         default: false
       cache-store:
@@ -133,7 +133,7 @@ jobs:
       # user can read that the trap removes, and only the copy gets the
       # credentials. The copy is not recursive: it
       # skips references that cache.nixos.org serves, which clients fetch there.
-      - name: Upload the paths cache.nixos.org lacks
+      - name: Upload the closure
         if: inputs.upload
         shell: bash
         env:
@@ -148,19 +148,10 @@ jobs:
           (umask 077 && printf '%s' "$SIGNING_KEY" >"$key_file")
           chmod 600 "$key_file"
 
-          nix path-info -r ./result >"$RUNNER_TEMP/closure.txt"
-          mapfile -t closure <"$RUNNER_TEMP/closure.txt"
-          nix path-info --json --json-format 1 --store https://cache.nixos.org "${closure[@]}" >"$RUNNER_TEMP/served.json"
-          jq -r 'to_entries[] | select(.value == null) | .key' "$RUNNER_TEMP/served.json" >"$RUNNER_TEMP/missing.txt"
-          mapfile -t missing <"$RUNNER_TEMP/missing.txt"
-
-          if [ "${#missing[@]}" -eq 0 ]; then
-            echo "Uploaded 0 paths: cache.nixos.org serves all ${#closure[@]} paths of the closure."
-            exit 0
-          fi
-
-          nix store sign --key-file "$key_file" "${missing[@]}"
-          nar_bytes=$(nix path-info --json --json-format 1 "${missing[@]}" | jq '[.[].narSize] | add')
+          # A binary cache rejects a path whose references it does not have, so
+          # the whole closure goes up. nix copy skips the paths the cache has.
+          nix store sign --recursive --key-file "$key_file" ./result
           AWS_ACCESS_KEY_ID="$ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS_KEY" \
-            nix copy --no-recursive --to "$CACHE_STORE" "${missing[@]}"
-          echo "Uploaded ${#missing[@]} of ${#closure[@]} paths, $nar_bytes bytes of NAR ($(numfmt --to=iec-i --suffix=B "$nar_bytes"))."
+            nix copy --to "$CACHE_STORE" ./result
+          closure_paths=$(nix path-info -r ./result | wc -l)
+          echo "The cache has the closure of $closure_paths paths."
