@@ -143,6 +143,7 @@ So change the lists through these tasks:
 ```sh
 mise run template:off deny
 mise run template:on deny
+mise run template:on go_xcframework --data xcframework_module=Foo --data repository=owner/name
 ```
 
 `template:off`:
@@ -158,6 +159,14 @@ mise run template:on deny
 
 - It adds the pieces to the list the template's questions put them in.
 - It runs `copier update --vcs-ref=:current:`.
+- The update takes the answers the repository records, and the template's default for every other question.
+  A piece whose answers have no valid default, such as `xcframework_module` for `go_xcframework`, needs `--data key=value`.
+- `--data` repeats, once for each answer.
+  The task passes each value to `copier update` as its own `--data` argument, after `pieces` and `pieces_extra`.
+- An answer that must differ from its default takes `--data` too.
+  The `repository` answer defaults to `<owner>/<folder>`, so a run from a worktree renders the worktree's folder name unless `--data repository=<owner>/<name>` sets it.
+- A value without `=` fails the task, and so do the keys `pieces` and `pieces_extra`, which the task sets from its piece arguments.
+  Nothing changes then.
 - A file the repository kept comes back with inline conflict markers between its copy and the template's.
   The task then fails, and `git diff --check` lists them.
 - A piece's tasks can declare tools the locks do not hold yet, such as Vale for `lint_prose`.
