@@ -1,0 +1,10 @@
+{
+  "name": "renovate-config",
+  "private": true,
+  "dependencies": {
+    "renovate": "44.257.9"
+  },
+  "overrides": {
+    "@yarnpkg/libzip": "3.2.1"
+  }
+}

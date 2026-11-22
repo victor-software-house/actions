@@ -1,0 +1,234 @@
+# The reusable Renovate run. It updates the active repositories of one
+# visibility: one job lists them, then each gets its own job. A caller runs
+# it on a schedule and by hand, and holds only the job that calls this one:
+#
+#   on:
+#     schedule:
+#       - cron: "0 9 * * 1"
+#     workflow_dispatch:
+#       inputs:
+#         dry-run:
+#           type: boolean
+#           default: true
+#   concurrency:
+#     group: renovate-${{ github.ref_name }}
+#     cancel-in-progress: false
+#   jobs:
+#     renovate:
+#       uses: victor-software-house/actions/.github/workflows/renovate.yml@<commit> # main, <date>
+#       permissions:
+#         contents: read
+#         id-token: write
+#       with:
+#         mise-version: <mise version>
+#         visibility: public
+#         dry-run: ${{ inputs.dry-run || false }}
+#       secrets:
+#         RENOVATE_APP_PRIVATE_KEY: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+#         RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
+#         RELEASE_MIRROR_CI_KEY: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+#
+# docs/renovate.md describes the scope, the tokens and the caches.
+name: Renovate
+
+on:
+  workflow_call:
+    inputs:
+      mise-version:
+        description: The mise release to install
+        type: string
+        required: true
+      visibility:
+        description: The repositories to update, public or private
+        type: string
+        required: true
+      min-commits:
+        description: The fewest real commits in 30 days that put a repository in scope
+        type: number
+        default: 2
+      limit:
+        description: The most repositories to update, most active first; 0 updates every one in scope
+        type: number
+        default: 0
+      exclude:
+        description: Repository names to leave out, one per line
+        type: string
+        default: ""
+      dry-run:
+        description: Report what Renovate would change, and write nothing
+        type: boolean
+        default: false
+      runner:
+        description: Final runner label for every job
+        type: string
+        default: ubuntu-slim
+    secrets:
+      RENOVATE_APP_PRIVATE_KEY:
+        description: The private key of the Renovate App; its client id is the RENOVATE_APP_CLIENT_ID variable
+        required: true
+      RELEASE_MIRROR_URL:
+        description: The release mirror's address; without it, tools download from GitHub
+        required: false
+      RELEASE_MIRROR_CI_KEY:
+        description: The key in the user name of a CI job's mirror login; it passes the mirror's edge rule and opens nothing alone
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+  MISE_ENV: ci
+  # rustup and cargo live inside mise's data folder, so the tools cache keeps
+  # the Rust toolchain too.
+  MISE_RUSTUP_HOME: /home/runner/.local/share/mise/rustup
+  MISE_CARGO_HOME: /home/runner/.local/share/mise/cargo
+
+jobs:
+  # Lists the repositories in scope, and warms the caches that the Renovate
+  # jobs only read. Saving them from every job compressed the same files many
+  # times and ran jobs past the 15-minute ubuntu-slim limit.
+  scope:
+    name: Scope
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 14
+    permissions:
+      contents: read
+      # The mise action exchanges it for the mirror's session token.
+      id-token: write
+    outputs:
+      matrix: ${{ steps.scope.outputs.matrix }}
+    steps:
+      # The renovate directory of this repository, at the commit the caller
+      # pinned. The caller's own repository is not needed.
+      - name: Check out the Renovate files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: /renovate/
+          sparse-checkout-cone-mode: false
+
+      # The query reads repositories of the given visibility only, across the
+      # owner, so this token names no repositories. It can only read.
+      - name: Create App installation token
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+
+      - name: Install tools
+        uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
+        with:
+          version: ${{ inputs.mise-version }}
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+          working_directory: renovate
+
+      - name: Cache bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ hashFiles('renovate/bun.lock') }}
+
+      - name: Install Renovate
+        working-directory: renovate
+        run: mise run renovate:install
+
+      - name: List the repositories
+        id: scope
+        working-directory: renovate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_VISIBILITY: ${{ inputs.visibility }}
+          RENOVATE_MIN_COMMITS: ${{ inputs.min-commits }}
+          RENOVATE_LIMIT: ${{ inputs.limit }}
+          RENOVATE_EXCLUDE: ${{ inputs.exclude }}
+        run: echo "matrix=$(mise run --quiet renovate:matrix)" >>"$GITHUB_OUTPUT"
+
+  renovate:
+    name: Renovate ${{ matrix.name }}
+    needs: scope
+    runs-on: ${{ inputs.runner }}
+    # GitHub stops an ubuntu-slim job at 15 minutes.
+    timeout-minutes: 14
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      # The jobs share one App installation's API rate limit.
+      max-parallel: 20
+      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
+    steps:
+      # The renovate directory of this repository, at the commit the caller
+      # pinned. The caller's own repository is not needed.
+      - name: Check out the Renovate files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: /renovate/
+          sparse-checkout-cone-mode: false
+
+      # A public run's token reaches only the repository it updates. A
+      # private run's token reaches every repository, because private
+      # repositories look up private sources, such as the Copier templates.
+      - name: Create App installation token
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ inputs.visibility == 'public' && matrix.name || '' }}
+          permission-administration: read
+          permission-checks: write
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+          permission-statuses: write
+          permission-vulnerability-alerts: read
+          permission-workflows: write
+
+      - name: Install tools
+        uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
+        with:
+          version: ${{ inputs.mise-version }}
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+          working_directory: renovate
+          # The Scope job saves the tools cache.
+          cache_save: "false"
+
+      - name: Restore bun packages
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ hashFiles('renovate/bun.lock') }}
+
+      # Renovate's repository cache lets a run skip work whose inputs did not
+      # change. Each repository keeps its own.
+      - name: Cache Renovate state
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /tmp/renovate/cache/renovate/repository
+          key: renovate-${{ matrix.name }}-${{ github.run_id }}
+          restore-keys: renovate-${{ matrix.name }}-
+
+      - name: Run Renovate
+        working-directory: renovate
+        env:
+          RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_CONFIG_FILE: config.js
+          RENOVATE_REPOSITORIES: ${{ matrix.repositories }}
+          RENOVATE_VISIBILITY: ${{ inputs.visibility }}
+          LOG_LEVEL: info
+        run: mise run ${{ inputs.dry-run && 'renovate:dry-run' || 'renovate' }}

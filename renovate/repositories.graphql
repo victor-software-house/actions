@@ -1,0 +1,29 @@
+# One page of an owner's repositories of one visibility, with the commits on
+# each default branch since a date. Pages stay at 10 repositories, because
+# larger ones time out with 100 commits each.
+query($owner: String!, $privacy: RepositoryPrivacy!, $since: GitTimestamp!, $endCursor: String) {
+  organization(login: $owner) {
+    repositories(first: 10, after: $endCursor, privacy: $privacy, isArchived: false, isFork: false) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        nameWithOwner
+        isMirror
+        mise: object(expression: "HEAD:mise.toml") { ... on Blob { text } }
+        defaultBranchRef {
+          target {
+            ... on Commit {
+              history(since: $since, first: 100) {
+                totalCount
+                nodes {
+                  messageHeadline
+                  parents { totalCount }
+                  author { user { login } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
