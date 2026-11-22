@@ -184,10 +184,8 @@ jobs:
           sparse-checkout: /renovate/
           sparse-checkout-cone-mode: false
 
-      # A public run's token reaches only the repository it updates. A
-      # private run's token reaches every repository, because private
-      # repositories look up private sources, such as the Copier templates.
-      # A dry run's token can only read.
+      # This token writes to the repository the job updates, and nothing
+      # else. A dry run's token can only read.
       - name: Create App installation token
         id: app-token
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
@@ -195,7 +193,7 @@ jobs:
           client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ inputs.visibility == 'public' && matrix.name || '' }}
+          repositories: ${{ matrix.name }}
           permission-administration: read
           permission-checks: ${{ inputs.dry-run && 'read' || 'write' }}
           permission-contents: ${{ inputs.dry-run && 'read' || 'write' }}
@@ -205,6 +203,19 @@ jobs:
           permission-vulnerability-alerts: read
           # The workflows permission has no read level, so a dry run asks for none.
           permission-workflows: ${{ !inputs.dry-run && 'write' || '' }}
+
+      # Renovate looks up GitHub sources with this read-only token, such as
+      # the Copier templates, a private repository. It reaches every
+      # repository the App is installed on, so the App's installation sets
+      # what a run can read.
+      - name: Create lookup token
+        id: lookup-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
 
       - name: Install tools
         uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
@@ -235,6 +246,7 @@ jobs:
         working-directory: renovate
         env:
           RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_LOOKUP_TOKEN: ${{ steps.lookup-token.outputs.token }}
           RENOVATE_CONFIG_FILE: config.js
           RENOVATE_REPOSITORIES: ${{ matrix.repositories }}
           RENOVATE_VISIBILITY: ${{ inputs.visibility }}
