@@ -2,7 +2,7 @@
 
 `.github/workflows/nix-host.yml` builds one NixOS system behind one `Build` job.
 It runs `nix flake check -L`, then `nix build -L <attribute> --out-link result`, on a native runner.
-In a run with `upload` set, it then copies the closure of the built system to the host's own Nix cache.
+When `upload` is set, it then uploads the built system's closure to the host's own Nix cache.
 
 ## Caller
 
