@@ -1,0 +1,166 @@
+# The reusable NixOS host build. A host repository's ci.yml calls it on
+# pull_request and merge_group, by commit:
+#
+#   jobs:
+#     host:
+#       if: ${{ !github.event.pull_request.draft }}
+#       uses: victor-software-house/actions/.github/workflows/nix-host.yml@<commit> # main, <date>
+#       permissions:
+#         contents: read
+#       with:
+#         attribute: .#nixosConfigurations.<host>.config.system.build.toplevel
+#         upload: ${{ github.event_name == 'merge_group' }}
+#         cache-store: <the cache's s3:// store URL>
+#         substituter: <the cache's read URL>
+#         trusted-public-key: <the cache's public key>
+#         environment: ${{ github.event_name == 'merge_group' && 'nix-cache' || '' }}
+#       secrets:
+#         NIX_CACHE_ACCESS_KEY_ID: ${{ secrets.NIX_CACHE_ACCESS_KEY_ID }}
+#         NIX_CACHE_SECRET_ACCESS_KEY: ${{ secrets.NIX_CACHE_SECRET_ACCESS_KEY }}
+#         NIX_CACHE_SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
+#
+# The job builds one system on a native runner. Only a run with `upload` set
+# writes to the cache: it signs the paths of the system's closure that
+# cache.nixos.org does not serve and copies them to `cache-store`. A pull
+# request builds with the cache as a substituter and writes nothing.
+name: Nix host
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: JSON array of final runner labels for the build
+        type: string
+        default: '["ubuntu-26.04-arm"]'
+      attribute:
+        description: The flake attribute to build, such as .#nixosConfigurations.<host>.config.system.build.toplevel
+        type: string
+        required: true
+      upload:
+        description: Copy the paths cache.nixos.org lacks to the cache after the build
+        type: boolean
+        default: false
+      cache-store:
+        description: The cache's s3:// store URL, with its endpoint and region as query parameters and no credentials; required when upload is true
+        type: string
+        default: ""
+      substituter:
+        description: The cache's read URL; empty adds no substituter
+        type: string
+        default: ""
+      trusted-public-key:
+        description: The public key that verifies the cache's signatures; empty adds no key
+        type: string
+        default: ""
+      environment:
+        description: The GitHub environment that holds the upload secrets; empty uses none
+        type: string
+        default: ""
+      timeout-minutes:
+        description: Cancels a hung build
+        type: number
+        default: 30
+    secrets:
+      NIX_CACHE_ACCESS_KEY_ID:
+        description: The access key ID that writes to the cache; required when upload is true
+        required: false
+      NIX_CACHE_SECRET_ACCESS_KEY:
+        description: The secret access key that writes to the cache; required when upload is true
+        required: false
+      NIX_CACHE_SIGNING_KEY:
+        description: The secret key, in Nix's name:base64 form, that signs the uploaded paths; required when upload is true
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # A job that calls a reusable workflow cannot set an environment, so the
+    # called job does, to read the environment's secrets. An empty name uses
+    # no environment.
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      # Fails before the build when an upload cannot finish, so a merge queue
+      # entry does not build for the whole timeout and then fail to upload.
+      - name: Check the upload inputs
+        if: inputs.upload
+        shell: bash
+        env:
+          CACHE_STORE: ${{ inputs.cache-store }}
+          ACCESS_KEY_ID: ${{ secrets.NIX_CACHE_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY: ${{ secrets.NIX_CACHE_SECRET_ACCESS_KEY }}
+          SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
+        run: |
+          failed=false
+          for name in CACHE_STORE ACCESS_KEY_ID SECRET_ACCESS_KEY SIGNING_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::upload is true, but $name is empty."
+              failed=true
+            fi
+          done
+          if [ "$failed" = true ]; then
+            exit 1
+          fi
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Nix
+        uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = auto
+            ${{ inputs.substituter != '' && format('extra-substituters = {0}', inputs.substituter) || '' }}
+            ${{ inputs.trusted-public-key != '' && format('extra-trusted-public-keys = {0}', inputs.trusted-public-key) || '' }}
+      - name: Check the flake
+        run: nix flake check -L
+      - name: Build the system
+        env:
+          ATTRIBUTE: ${{ inputs.attribute }}
+        run: nix build -L "$ATTRIBUTE" --out-link result
+      # cache.nixos.org already serves most of a system's closure. One batched
+      # query lists the paths it lacks: nix path-info --json maps each
+      # path to its info, or to null when the store does not have it.
+      # Only the signing step reads the key, from a file only the runner
+      # user can read that the trap removes, and only the copy gets the
+      # credentials. The copy is not recursive: it
+      # skips references that cache.nixos.org serves, which clients fetch there.
+      - name: Upload the paths cache.nixos.org lacks
+        if: inputs.upload
+        shell: bash
+        env:
+          CACHE_STORE: ${{ inputs.cache-store }}
+          ACCESS_KEY_ID: ${{ secrets.NIX_CACHE_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY: ${{ secrets.NIX_CACHE_SECRET_ACCESS_KEY }}
+          SIGNING_KEY: ${{ secrets.NIX_CACHE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/nix-cache-signing-key"
+          trap 'rm -f "$key_file"' EXIT
+          (umask 077 && printf '%s' "$SIGNING_KEY" >"$key_file")
+          chmod 600 "$key_file"
+
+          nix path-info -r ./result >"$RUNNER_TEMP/closure.txt"
+          mapfile -t closure <"$RUNNER_TEMP/closure.txt"
+          nix path-info --json --json-format 1 --store https://cache.nixos.org "${closure[@]}" >"$RUNNER_TEMP/served.json"
+          jq -r 'to_entries[] | select(.value == null) | .key' "$RUNNER_TEMP/served.json" >"$RUNNER_TEMP/missing.txt"
+          mapfile -t missing <"$RUNNER_TEMP/missing.txt"
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "Uploaded 0 paths: cache.nixos.org serves all ${#closure[@]} paths of the closure."
+            exit 0
+          fi
+
+          nix store sign --key-file "$key_file" "${missing[@]}"
+          nar_bytes=$(nix path-info --json --json-format 1 "${missing[@]}" | jq '[.[].narSize] | add')
+          AWS_ACCESS_KEY_ID="$ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS_KEY" \
+            nix copy --no-recursive --to "$CACHE_STORE" "${missing[@]}"
+          echo "Uploaded ${#missing[@]} of ${#closure[@]} paths, $nar_bytes bytes of NAR ($(numfmt --to=iec-i --suffix=B "$nar_bytes"))."
