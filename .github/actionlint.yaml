@@ -23,3 +23,9 @@ paths:
       # The step refuses a mirror-url holding any character outside
       # A-Za-z0-9._~:/-, a newline included, before it writes GITHUB_ENV.
       - 'untrusted input from the variable MIRROR_URL \(inputs\.mirror-url\) is written to \$GITHUB_ENV.+'
+  .github/workflows/renovate.yml:
+    ignore:
+      # The Scope job's token lists every repository of one visibility, and a
+      # private run's Renovate jobs read private sources across the owner, so
+      # those tokens name no repositories.
+      - '"owner" without "repositories"'

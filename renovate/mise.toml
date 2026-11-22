@@ -1,0 +1,37 @@
+# Renovate's runtime and the tools it calls to refresh lockfiles. The
+# renovate workflow checks out this directory alone, so this file sets what
+# the repository root would.
+min_version = "2026.11.10"
+
+[settings]
+locked = true
+experimental = true
+lockfile = true
+lockfile_platforms = ["linux-x64", "macos-arm64"]
+
+[tools]
+node = "24.22.3"
+bun = "1.4.4"
+go = "1.27.4"
+rust = { version = "1.100.0", profile = "minimal" }
+uv = "0.13.6"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+[tasks."renovate:install"]
+description = "Installs Renovate from package.json and bun.lock"
+run = "bun install --frozen-lockfile"
+
+[tasks.renovate]
+description = "Runs Renovate on the repos in RENOVATE_REPOSITORIES"
+depends = ["renovate:install"]
+run = "renovate"
+
+# config.js drops the schedule when RENOVATE_DRY_RUN is set, so a dry run
+# shows every update a scheduled run would make.
+[tasks."renovate:dry-run"]
+description = "Reports what Renovate would change, and writes nothing"
+depends = ["renovate:install"]
+env = { RENOVATE_DRY_RUN = "full" }
+run = "renovate"
