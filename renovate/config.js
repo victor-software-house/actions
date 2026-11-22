@@ -5,7 +5,17 @@
 // The platform token writes only to the repository being updated. Lookups of
 // GitHub sources use the read-only RENOVATE_LOOKUP_TOKEN instead.
 const lookupToken = process.env.RENOVATE_LOOKUP_TOKEN;
-const githubLookups = ['git-tags', 'github-tags', 'github-releases', 'github-release-attachments', 'go'];
+// Release notes come through github-changelog. Presets from other
+// repositories would use the platform token; no repository extends one.
+const githubLookups = [
+  'git-refs',
+  'git-tags',
+  'github-changelog',
+  'github-releases',
+  'github-release-attachments',
+  'github-tags',
+  'go',
+];
 
 // The App of a public run is installed on public repositories only, so it
 // cannot read the private Copier templates. A public run leaves them to each

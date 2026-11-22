@@ -73,7 +73,7 @@ Nix flake inputs are off, because the runner has no nix.
   A public caller uses an App installed only on public repositories, so its key reaches no private repository.
 - The Scope job's token reads repository contents across that installation.
 - Each Renovate job's platform token writes only to the repository it updates.
-- Renovate looks up GitHub sources, such as tags, releases and Go modules, with a separate read-only token across the installation.
+- In a private run, Renovate looks up GitHub sources, such as tags, releases, release notes and Go modules, with a separate read-only token across the installation.
 - A public run leaves Copier templates to each repository's daily Template check, because the templates are private.
 - A dry run's tokens can only read.
 

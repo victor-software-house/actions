@@ -208,8 +208,10 @@ jobs:
       # the Copier templates, a private repository. It reaches every
       # repository the App is installed on, so the App's installation sets
       # what a run can read.
+      # A public run reads nothing private, so it skips this token.
       - name: Create lookup token
         id: lookup-token
+        if: ${{ inputs.visibility != 'public' }}
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
