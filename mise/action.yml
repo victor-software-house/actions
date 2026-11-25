@@ -134,7 +134,9 @@ runs:
           fi
         fi
         if [ -n "$session" ]; then
-          echo "MISE_URL_REPLACEMENTS={\"https://github.com/\": \"${mirror%%://*}://$user:$session@${mirror#*://}/\"}" >>"$GITHUB_ENV"
+          target="${mirror%%://*}://$user:$session@${mirror#*://}/"
+          # The second rule sends this organization's GHCR package reads to the mirror.
+          printf 'MISE_URL_REPLACEMENTS={"https://github.com/": "%s", "regex:^https://ghcr\\\\.io/(token\\\\?.*scope=repository%%3Avictor-software-house%%2F.*|v2/victor-software-house/.*)$": "%s$1"}\n' "$target" "$target" >>"$GITHUB_ENV"
         else
           echo 'MISE_URL_REPLACEMENTS={"https://github.com/astral-sh/": "https://releases.astral.sh/github/"}' >>"$GITHUB_ENV"
         fi
