@@ -35,11 +35,13 @@ sha256() {
 }
 
 # Prints the digest of the first layer of the ref's latest tag, and nothing
-# when the package or the tag does not exist yet.
+# when the package or the tag is not published yet. GHCR answers DENIED for a
+# package that does not exist, so DENIED counts as not published too. A real
+# authentication failure then fails at the push, with crane's own error.
 latest_layer() {
   local ref=$1 manifest
   if ! manifest=$(crane manifest "$ref:latest" 2>"$work/error"); then
-    if grep -q -e NAME_UNKNOWN -e MANIFEST_UNKNOWN "$work/error"; then
+    if grep -q -e NAME_UNKNOWN -e MANIFEST_UNKNOWN -e DENIED "$work/error"; then
       return 0
     fi
     cat "$work/error" >&2
@@ -74,21 +76,39 @@ process_group() {
     '{package: $package, digest: $digest, changed: $changed}'
 }
 
+# A package name is lowercase, so a group name must be too. Checking every
+# name first publishes nothing when one is bad.
+check_names() {
+  local pattern='^[a-z0-9]+([._-][a-z0-9]+)*$' bad='' name
+  for name in "$@"; do
+    if [[ ! $name =~ $pattern ]]; then
+      bad+="$name, "
+    fi
+  done
+  if [[ -n $bad ]]; then
+    echo "::error::A group name must match $pattern; rename: ${bad%, }"
+    return 1
+  fi
+}
+
 summary_row() {
   jq -r --arg name "$1" '"| \($name) | `\(.package)` | `\(.digest)` | \(.changed) |"' <<<"$2"
 }
 
 main() {
-  local dirs=("$ROOT"/*/) dir name entry groups='{}'
+  local dirs=("$ROOT"/*/) dir name names=() entry groups='{}'
   if ((${#dirs[@]} == 0)); then
     echo "::error::$ROOT has no group directory"
     return 1
   fi
-  login
-  printf '| Group | Package | Digest | Changed |\n| :-- | :-- | :-- | :-- |\n' >>"$GITHUB_STEP_SUMMARY"
   for dir in "${dirs[@]}"; do
     name=${dir%/}
-    name=${name##*/}
+    names+=("${name##*/}")
+  done
+  check_names "${names[@]}"
+  login
+  printf '| Group | Package | Digest | Changed |\n| :-- | :-- | :-- | :-- |\n' >>"$GITHUB_STEP_SUMMARY"
+  for name in "${names[@]}"; do
     entry=$(process_group "$name")
     groups=$(jq -c --arg name "$name" --argjson entry "$entry" '. + {($name): $entry}' <<<"$groups")
     summary_row "$name" "$entry" >>"$GITHUB_STEP_SUMMARY"

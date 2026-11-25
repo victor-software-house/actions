@@ -29,12 +29,15 @@ For each directory directly under `root`, in name order:
 1. It builds `<group>.tar.gz` from the directory, with the directory's name as the archive's top folder, sorted names, zero timestamps and owner 0.
    The same files always give the same bytes.
 2. It reads the manifest of the package's `latest` tag.
-   A missing package or tag counts as changed.
+   A package or tag that answers name unknown, manifest unknown or denied counts as not published yet, so the group counts as changed.
+   GHCR answers denied for a package that does not exist.
+   A real authentication failure then fails at the push, with crane's own error.
 3. When the manifest's first layer has the archive's sha256 digest, the group is unchanged, and the digest it reports is the `latest` tag's.
 4. Otherwise it appends the archive as the one layer of a new image tagged with the commit SHA, labels the image with `org.opencontainers.image.source`, and moves `latest` to it.
    The digest it reports is the new image's.
 
 It fails when `root` has no group.
+It checks every group name against `^[a-z0-9]+([._-][a-z0-9]+)*$` first, and when any name fails, it lists them in one error and publishes nothing.
 It logs in to ghcr.io with the `token` input on stdin, and writes a table of the groups to the job summary.
 
 ## Using a group
