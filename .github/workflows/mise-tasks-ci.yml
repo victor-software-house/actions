@@ -1,0 +1,95 @@
+# The reusable mise tasks CI workflow accepts a final runner label from its
+# caller. A repository of shared mise task groups verifies on pull requests
+# and merge groups with `mise run verify`, behind one `Verify` job. Where the
+# caller sets `publish`, it also publishes each changed group as a one-layer
+# OCI artifact on GHCR, behind one `Publish` job.
+name: Mise tasks CI
+
+on:
+  workflow_call:
+    inputs:
+      mise-version:
+        description: The mise release to install
+        type: string
+        required: true
+      runner:
+        description: Final runner label for the jobs
+        type: string
+        default: ubuntu-26.04
+      timeout-minutes:
+        description: Cancels a hung job
+        type: number
+        default: 10
+      publish:
+        description: Publish each changed task group after Verify passes
+        type: boolean
+        default: false
+    secrets:
+      RELEASE_MIRROR_URL:
+        description: The release mirror's address; without it, tools download from GitHub
+        required: false
+      RELEASE_MIRROR_CI_KEY:
+        description: The key in the user name of a CI job's mirror login; it passes the mirror's edge rule and opens nothing alone
+        required: false
+
+# The caller passes the organization secrets RELEASE_MIRROR_URL and
+# RELEASE_MIRROR_CI_KEY, and the Verify job downloads its tools through the
+# release mirror. `id-token: write` and `packages: write` are caller
+# contracts: the mise action exchanges the job's OIDC token for a session
+# token, Publish writes the packages, and GitHub refuses to start a called
+# workflow whose job asks for a permission its caller withholds.
+permissions:
+  contents: read
+
+env:
+  # The CI profile; local work loads dev from .miserc.toml, which CI never does.
+  MISE_ENV: ci
+
+jobs:
+  verify:
+    name: Verify
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      # The mise action's release mirror session token.
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install locked tools
+        uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
+        with:
+          version: ${{ inputs.mise-version }}
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+      - name: Verify
+        run: mise run verify
+
+  # Runs on the caller's choice, which is a push to the default branch: the
+  # packages are the default branch's groups, never a pull request's.
+  publish:
+    name: Publish
+    needs: verify
+    if: ${{ inputs.publish }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install locked tools
+        uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
+        with:
+          version: ${{ inputs.mise-version }}
+          mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
+          mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+      - name: Publish the task groups
+        uses: victor-software-house/actions/publish-task-groups@c2cecf2f80fcf53bcfa1a1cfc664d0e3e2b0cccf # feat/mise-tasks-ci, 2026-11-25

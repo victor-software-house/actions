@@ -14,6 +14,7 @@ Each piece lives here once, and every repository that uses it pins one commit.
 | `macos-signing/` | Actions that load and remove the macOS signing identities | [macos-signing](macos-signing/README.md) |
 | `.github/workflows/rust-ci.yml` | A reusable workflow: Rust build, tests and checks behind one `Verify` job | [Rust CI](docs/rust-ci.md) |
 | `.github/workflows/bun-ci.yml` | A reusable workflow: a Bun repository's `mise run verify` behind one `Verify` job | [Bun CI](docs/bun-ci.md) |
+| `.github/workflows/mise-tasks-ci.yml` | A reusable workflow: a task-group repository's `mise run verify` behind one `Verify` job, and a `Publish` job that pushes each changed group to GHCR | [Shared task groups](#shared-task-groups) |
 | `.github/workflows/nix-host.yml` | A reusable workflow: builds one NixOS system on a native runner and, in the merge queue, uploads the closure to an S3-compatible Nix cache | [Nix host](docs/nix-host.md) |
 | `.github/workflows/template-check.yml` | A reusable workflow that fails when a newer template tag would change the repository | [Template check](docs/template-check.md) |
 | `.github/workflows/secrets.yml` | A reusable workflow that scans commits for credentials with gitleaks | [Secrets scan](docs/secrets.md) |
@@ -36,6 +37,56 @@ A caller names a full commit SHA, with `# main, <date>` as the comment:
 A change here reaches a repository only through a reviewed pin bump.
 A tag, when one exists, is annotated and moves by patch only, from `v0.0.1`.
 It sits on a merged `main` commit whose CI passed, and never moves.
+
+## Shared task groups
+
+A repository of shared mise task groups keeps each group as a directory under `groups/`.
+Its `ci.yml` calls `mise-tasks-ci.yml`, which runs `mise run verify` on pull requests and merge groups.
+On a push to the default branch the workflow also runs [publish-task-groups](publish-task-groups/README.md), which publishes each changed group as a one-layer OCI artifact.
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+jobs:
+  verify:
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    uses: victor-software-house/actions/.github/workflows/mise-tasks-ci.yml@<commit> # main, <date>
+    with:
+      mise-version: 2026.11.6
+      publish: ${{ github.event_name == 'push' }}
+    secrets:
+      RELEASE_MIRROR_URL: ${{ secrets.RELEASE_MIRROR_URL }}
+      RELEASE_MIRROR_CI_KEY: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
+```
+
+| Input | Default | Use |
+|:--|:--|:--|
+| `mise-version` | none | The mise release the jobs install |
+| `runner` | `ubuntu-26.04` | The final runner label of both jobs |
+| `timeout-minutes` | `10` | Cancels a hung job |
+| `publish` | `false` | Runs the `Publish` job after `Verify` passes |
+
+A consumer includes a published group by its digest, which the action reports in its `groups` output and in the job summary:
+
+```toml
+[task_config]
+includes = ["oci::ghcr.io/<owner>/tasks-<group>@sha256:<digest>"]
+```
 
 ## Checks
 
