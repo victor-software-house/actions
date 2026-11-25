@@ -116,15 +116,16 @@ done
 # Contract: compare the public API with the newest release tag that matches
 # v<major>.<minor>.<patch>, the tags SwiftPM resolves versions from. With no
 # such tag it prints a notice and passes. A breaking change fails the task
-# unless a .changeset/*.md fragment that differs from the base declares a
-# package as minor or major (the house rule sets a breaking change to a minor
-# fragment). The base is the merge-base of HEAD and origin/$GITHUB_BASE_REF,
-# else origin/main, else origin/master, as verctl picks its default branch.
-# When HEAD is the base, as on a push to the default branch, every pending
-# fragment counts. A failure of the tool itself, with no API breakage reported,
-# fails the task whatever the fragments say.
-# A shallow clone is completed first, with its tags, because the baseline
-# checkout and the merge-base need their history.
+# unless the next release already allows it, which one of these shows:
+#   - a .changeset/*.md fragment tracked at HEAD declares a package at a level
+#     that permits a break. Every fragment still pending goes into the next
+#     release, so the fragments need no comparison with a base branch.
+#   - VERSION names a newer minor or major than the tag, as on the commit of a
+#     merged Version PR, which removes the fragments before the tag exists.
+# Below 1.0 (tag major 0) minor or major permits a break; from 1.0 only major
+# does. A shallow clone is completed first, with its tags, because the
+# baseline checkout needs the history. A failure of the tool that reports no
+# API breakage fails the task.
 ["swift:api"]
 description = "Public API breakage against the newest v<major>.<minor>.<patch> tag"
 shell = "bash -o pipefail -c"
@@ -148,51 +149,54 @@ if swift package diagnose-api-breaking-changes "$tag" 2>&1 | tee "$log"; then
   exit 0
 fi
 # The tool exits 1 for a breakage and for a failed build or comparison alike,
-# so only its own "API breakage:" diagnostic reaches the fragments below.
+# so only its own "API breakage:" diagnostic reaches the checks below.
 if ! grep -q 'API breakage' "$log"; then
   echo "✘ diagnose-api-breaking-changes failed without reporting an API breakage" >&2
   exit 1
 fi
 
-base=""
-for name in "${GITHUB_BASE_REF:-}" main master; do
-  [ -n "$name" ] || continue
-  if git rev-parse --verify --quiet "refs/remotes/origin/$name" > /dev/null; then
-    base=$(git merge-base HEAD "origin/$name")
-    break
-  fi
-done
-if [ -z "$base" ]; then
-  echo "✘ breaking API changes since $tag, and no origin/${GITHUB_BASE_REF:-main} to find the fragments this change adds" >&2
-  exit 1
-fi
+[[ $tag =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]]
+tag_major=${BASH_REMATCH[1]}
+tag_minor=${BASH_REMATCH[2]}
 
-# On the default branch HEAD is the base, so no fragment differs: every
-# pending fragment counts there. Elsewhere only the fragments this change adds
-# or edits count.
-if [ "$base" = "$(git rev-parse HEAD)" ]; then
-  fragments=$(git ls-files -- '.changeset/*.md')
+# The levels that permit a break in the next release.
+if [ "$tag_major" -eq 0 ]; then
+  levels='minor|major'
 else
-  fragments=$(git diff --name-only --diff-filter=AM "$base" -- '.changeset/*.md')
+  levels='major'
 fi
 
-# The front matter of each fragment: a line whose value is minor or major,
-# with the key quoted or not.
+# A fragment declares a level on a front matter line, with the key quoted or not.
 declared=$(
-  while read -r fragment; do
-    [ -n "$fragment" ] || continue
-    awk '
+  git ls-files -- '.changeset/*.md' | while read -r fragment; do
+    awk -v levels="$levels" '
       /^---[[:space:]]*$/ { fence++; next }
-      fence == 1 && /:[[:space:]]*"?(minor|major)"?[[:space:]]*$/ { print FILENAME ": " $0 }
+      fence == 1 && $0 ~ (":[[:space:]]*\"?(" levels ")\"?[[:space:]]*$") { print FILENAME ": " $0 }
     ' "$fragment"
-  done <<< "$fragments"
+  done
 )
 if [ -n "$declared" ]; then
-  echo "The breaking API changes since $tag are declared by:"
+  echo "The next release allows the break, by:"
   echo "$declared"
   exit 0
 fi
 
-echo "✘ the API breaks since $tag, and no .changeset fragment of this change declares minor or major: add one, or restore the API" >&2
+# VERSION: a newer major always allows it; a newer minor only below 1.0.
+if [ -f VERSION ]; then
+  version=$(tr -d '[:space:]' < VERSION)
+  if [[ $version =~ ^([0-9]+)\.([0-9]+)\. ]]; then
+    major=${BASH_REMATCH[1]}
+    minor=${BASH_REMATCH[2]}
+    if [ "$major" -gt "$tag_major" ] || { [ "$tag_major" -eq 0 ] && [ "$major" -eq 0 ] && [ "$minor" -gt "$tag_minor" ]; }; then
+      echo "The next release allows the break: VERSION is $version, past $tag"
+      exit 0
+    fi
+  else
+    echo "✘ VERSION does not start with <major>.<minor>.: $version" >&2
+    exit 1
+  fi
+fi
+
+echo "✘ the API breaks since $tag, and the next release does not allow it: add a .changeset fragment at $levels, or restore the API" >&2
 exit 1
 '''
