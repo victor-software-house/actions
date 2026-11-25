@@ -1,0 +1,47 @@
+name: publish-task-groups
+description: >-
+  Publish each directory under a root as a one-layer OCI artifact on GHCR when
+  its content changed, so a repository can include it as a mise task group
+author: victor-software-house
+
+inputs:
+  root:
+    description: The directory whose subdirectories are the task groups
+    default: groups
+  prefix:
+    description: The prefix of each package name, followed by the group's directory name
+    default: tasks-
+  owner:
+    description: The GHCR owner of the packages; the script lowercases it
+    default: ${{ github.repository_owner }}
+  source:
+    description: The repository URL for the org.opencontainers.image.source label
+    default: ${{ github.server_url }}/${{ github.repository }}
+  token:
+    description: The token that logs in to ghcr.io, with packages write access
+    default: ${{ github.token }}
+  crane-version:
+    description: The crane release to run through mise
+    default: 0.22.1
+
+outputs:
+  groups:
+    description: A JSON object that maps each group to its package, digest and whether this run published it
+    value: ${{ steps.publish.outputs.groups }}
+
+runs:
+  using: composite
+  steps:
+    # The inputs reach the script as environment variables, so none is in an
+    # argument list and the token stays out of a process listing.
+    - name: Publish the task groups
+      id: publish
+      shell: bash
+      env:
+        ROOT: ${{ inputs.root }}
+        PREFIX: ${{ inputs.prefix }}
+        OWNER: ${{ inputs.owner }}
+        SOURCE: ${{ inputs.source }}
+        TOKEN: ${{ inputs.token }}
+        CRANE_VERSION: ${{ inputs.crane-version }}
+      run: "$GITHUB_ACTION_PATH/publish.sh"
