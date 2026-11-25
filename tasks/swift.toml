@@ -84,9 +84,15 @@ else
   docc=$(command -v docc) || { echo "✘ docc is not on the PATH" >&2; exit 1; }
 fi
 
-swift package dump-symbol-graph
-symbols="$(dirname "$(swift build --show-bin-path)")/symbolgraph"
-[ -d "$symbols" ] || { echo "✘ no symbol graph folder at $symbols" >&2; exit 1; }
+# SwiftPM prints the folder it wrote the graphs to, whose place depends on its
+# build system: .build/out/symbolgraph with Swift Build in SwiftPM 6.4.
+dump=$(swift package dump-symbol-graph 2>&1) || { printf '%s\n' "$dump" >&2; exit 1; }
+printf '%s\n' "$dump"
+symbols=$(printf '%s\n' "$dump" | sed -n 's/^.*Files written to //p' | tail -n 1 | tr -d '\r')
+if [ -z "$symbols" ] || [ ! -d "$symbols" ]; then
+  echo "✘ swift package dump-symbol-graph named no symbol graph folder: ${symbols:-none}" >&2
+  exit 1
+fi
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
