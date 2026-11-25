@@ -1,0 +1,202 @@
+# The standard Swift tasks, identical in every repository that includes them.
+# Include this file by commit, after mise-tasks:
+#
+#   [settings]
+#   experimental = true  # mise loads git:: task includes only with this on
+#
+#   [task_config]
+#   includes = [
+#     "mise-tasks",
+#     "git::https://github.com/victor-software-house/actions.git//tasks/swift.toml?ref=<commit>",
+#   ]
+#
+# The catalog names no Swift or Xcode version: the toolchain on the PATH runs
+# every task, and the including repository selects it (DEVELOPER_DIR on macOS).
+# Every task needs only the toolchain: swift format, docc, symbol graph
+# extraction and API digestion ship inside it, so nothing installs and no
+# manifest names a plugin. The including repository defines check from the
+# tasks it wants.
+["swift:build"]
+description = "Build the package and its tests"
+run = "swift build --build-tests"
+
+["swift:test"]
+description = "Run the package tests"
+run = "swift test"
+
+# Contract: lint Package.swift, Sources and Tests, whichever of them exist,
+# with the .swift-format that sits nearest above each file. --strict makes a
+# warning an error.
+["swift:lint"]
+description = "swift format lint --strict over Package.swift, Sources and Tests"
+shell = "bash -o pipefail -c"
+run = '''
+paths=()
+for path in Package.swift Sources Tests; do
+  [ -e "$path" ] && paths+=("$path")
+done
+if [ -z "${paths[*]-}" ]; then
+  echo "✘ none of Package.swift, Sources and Tests exists in $PWD" >&2
+  exit 1
+fi
+swift format lint --strict --parallel --recursive "${paths[@]}"
+'''
+
+# Contract: the same paths as swift:lint, rewritten in place.
+["swift:format"]
+description = "swift format --in-place over Package.swift, Sources and Tests"
+shell = "bash -o pipefail -c"
+run = '''
+paths=()
+for path in Package.swift Sources Tests; do
+  [ -e "$path" ] && paths+=("$path")
+done
+if [ -z "${paths[*]-}" ]; then
+  echo "✘ none of Package.swift, Sources and Tests exists in $PWD" >&2
+  exit 1
+fi
+swift format format --in-place --parallel --recursive "${paths[@]}"
+'''
+
+# Contract: build DocC documentation for each target in SWIFT_DOC_TARGETS, a
+# space-separated list of module names that the including repository sets, and
+# fail on any warning, such as a symbol link that resolves to nothing. The
+# task fails when the list is empty. A target's catalog is
+# Sources/<target>/<target>.docc when that folder exists; without one, docc
+# builds from the symbol graph alone. docc comes from xcrun --find docc on
+# macOS and from the PATH elsewhere. The output goes to a temporary folder
+# and is deleted, so nothing is written to the repository besides .build.
+["swift:docs"]
+description = "DocC build of each target in SWIFT_DOC_TARGETS, warnings as errors"
+shell = "bash -o pipefail -c"
+run = '''
+set -euo pipefail
+
+SWIFT_DOC_TARGETS="${SWIFT_DOC_TARGETS:-}"
+if [ -z "${SWIFT_DOC_TARGETS//[[:space:]]/}" ]; then
+  echo "✘ SWIFT_DOC_TARGETS is unset or empty: set it to the module names to document, space-separated" >&2
+  exit 1
+fi
+
+if [ "$(uname -s)" = Darwin ]; then
+  docc=$(xcrun --find docc)
+else
+  docc=$(command -v docc) || { echo "✘ docc is not on the PATH" >&2; exit 1; }
+fi
+
+swift package dump-symbol-graph
+symbols="$(dirname "$(swift build --show-bin-path)")/symbolgraph"
+[ -d "$symbols" ] || { echo "✘ no symbol graph folder at $symbols" >&2; exit 1; }
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+for target in $SWIFT_DOC_TARGETS; do
+  graphs="$work/$target.symbolgraphs"
+  mkdir -p "$graphs"
+  # The module's own graph and the graphs of its extensions of other modules.
+  cp "$symbols/$target.symbols.json" "$graphs/" 2>/dev/null || {
+    echo "✘ no symbol graph for target $target in $symbols: is it a library target with public symbols?" >&2
+    exit 1
+  }
+  cp "$symbols/$target@"*.symbols.json "$graphs/" 2>/dev/null || true
+  catalog=()
+  [ -d "Sources/$target/$target.docc" ] && catalog=("Sources/$target/$target.docc")
+  echo "Documenting $target"
+  # ${catalog[@]+...} keeps an empty array from failing under set -u on bash 3.2.
+  "$docc" convert ${catalog[@]+"${catalog[@]}"} \
+    --fallback-display-name "$target" \
+    --fallback-bundle-identifier "$target" \
+    --fallback-bundle-version 0 \
+    --additional-symbol-graph-dir "$graphs" \
+    --output-path "$work/$target.doccarchive" \
+    --warnings-as-errors
+done
+'''
+
+# Contract: compare the public API with the newest release tag that matches
+# v<major>.<minor>.<patch>, the tags SwiftPM resolves versions from. With no
+# such tag it prints a notice and passes. A breaking change fails the task
+# unless the next release already allows it, which one of these shows:
+#   - a .changeset/*.md fragment tracked at HEAD declares a package at a level
+#     that permits a break. Every fragment still pending goes into the next
+#     release, so the fragments need no comparison with a base branch.
+#   - VERSION names a newer minor or major than the tag, as on the commit of a
+#     merged Version PR, which removes the fragments before the tag exists.
+# Below 1.0 (tag major 0) minor or major permits a break; from 1.0 only major
+# does. A shallow clone is completed first, with its tags, because the
+# baseline checkout needs the history. A failure of the tool that reports no
+# API breakage fails the task.
+["swift:api"]
+description = "Public API breakage against the newest v<major>.<minor>.<patch> tag"
+shell = "bash -o pipefail -c"
+run = '''
+set -euo pipefail
+
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+  git fetch --quiet --unshallow --tags origin
+fi
+
+tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+if [ -z "$tag" ]; then
+  echo "notice: no v<major>.<minor>.<patch> tag exists, so there is no release to compare against"
+  exit 0
+fi
+
+echo "Comparing the API with $tag"
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+if swift package diagnose-api-breaking-changes "$tag" 2>&1 | tee "$log"; then
+  exit 0
+fi
+# The tool exits 1 for a breakage and for a failed build or comparison alike,
+# so only its own "API breakage:" diagnostic reaches the checks below.
+if ! grep -q 'API breakage' "$log"; then
+  echo "✘ diagnose-api-breaking-changes failed without reporting an API breakage" >&2
+  exit 1
+fi
+
+[[ $tag =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]]
+tag_major=${BASH_REMATCH[1]}
+tag_minor=${BASH_REMATCH[2]}
+
+# The levels that permit a break in the next release.
+if [ "$tag_major" -eq 0 ]; then
+  levels='minor|major'
+else
+  levels='major'
+fi
+
+# A fragment declares a level on a front matter line, with the key quoted or not.
+declared=$(
+  git ls-files -- '.changeset/*.md' | while read -r fragment; do
+    awk -v levels="$levels" '
+      /^---[[:space:]]*$/ { fence++; next }
+      fence == 1 && $0 ~ (":[[:space:]]*\"?(" levels ")\"?[[:space:]]*$") { print FILENAME ": " $0 }
+    ' "$fragment"
+  done
+)
+if [ -n "$declared" ]; then
+  echo "The next release allows the break, by:"
+  echo "$declared"
+  exit 0
+fi
+
+# VERSION: a newer major always allows it; a newer minor only below 1.0.
+if [ -f VERSION ]; then
+  version=$(tr -d '[:space:]' < VERSION)
+  if [[ $version =~ ^([0-9]+)\.([0-9]+)\. ]]; then
+    major=${BASH_REMATCH[1]}
+    minor=${BASH_REMATCH[2]}
+    if [ "$major" -gt "$tag_major" ] || { [ "$tag_major" -eq 0 ] && [ "$major" -eq 0 ] && [ "$minor" -gt "$tag_minor" ]; }; then
+      echo "The next release allows the break: VERSION is $version, past $tag"
+      exit 0
+    fi
+  else
+    echo "✘ VERSION does not start with <major>.<minor>.: $version" >&2
+    exit 1
+  fi
+fi
+
+echo "✘ the API breaks since $tag, and the next release does not allow it: add a .changeset fragment at $levels, or restore the API" >&2
+exit 1
+'''

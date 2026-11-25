@@ -107,6 +107,71 @@ Run it by hand.
 - `semver` also runs through `ver`, so a published crate includes `ver` too.
   It fails when the release config is missing.
 
+## Swift catalog
+
+`swift.toml` holds the standard Swift tasks.
+Include it in `mise.toml` after `mise-tasks`:
+
+```toml
+[settings]
+# mise loads git:: task includes only in experimental mode.
+experimental = true
+
+[env]
+# swift:docs documents these modules, space-separated.
+SWIFT_DOC_TARGETS = "MyLibrary"
+
+[task_config]
+includes = [
+  "mise-tasks",
+  "git::https://github.com/victor-software-house/actions.git//tasks/swift.toml?ref=<commit>",
+]
+```
+
+The catalog names no Swift or Xcode version and defines no `check`.
+The toolchain on the `PATH` runs every task, and the including repository selects it, such as through `DEVELOPER_DIR` on macOS.
+`swift format`, `docc`, symbol graph extraction and API digestion ship inside the toolchain, so the catalog installs nothing and the manifest names no plugin.
+
+| Task | Runs |
+|:--|:--|
+| `swift:build` | `swift build --build-tests` |
+| `swift:test` | `swift test` |
+| `swift:lint` | `swift format lint --strict --parallel --recursive` over `Package.swift`, `Sources` and `Tests`, whichever exist |
+| `swift:format` | `swift format format --in-place --parallel --recursive` over the same paths |
+| `swift:docs` | `swift package dump-symbol-graph`, then `docc convert --warnings-as-errors` for each target in `SWIFT_DOC_TARGETS` |
+| `swift:api` | `swift package diagnose-api-breaking-changes` against the newest `v<major>.<minor>.<patch>` tag |
+
+### swift:lint and swift:format
+
+- Each file is linted with the `.swift-format` nearest above it, so a repository relaxes a rule for `Tests/` with its own file there.
+- Both fail when none of the three paths exists.
+
+### swift:docs
+
+- `SWIFT_DOC_TARGETS` is a space-separated list of module names.
+  The task fails when it is unset or empty.
+- A target's catalog is `Sources/<target>/<target>.docc` when that folder exists.
+  Without one, `docc` builds from the symbol graph alone.
+- `docc` comes from `xcrun --find docc` on macOS and from the `PATH` elsewhere.
+- Any `docc` warning fails the task, such as a symbol link that resolves to nothing.
+- The output goes to a temporary folder that the task deletes.
+
+### swift:api
+
+- It picks the newest tag that matches `v<major>.<minor>.<patch>` exactly, the tags SwiftPM resolves versions from.
+  With no such tag it prints a notice and passes.
+- It completes a shallow clone with its tags first, because the baseline checkout needs the history.
+- A breaking change fails the task unless the next release already allows it.
+  A fragment that is still pending goes into the next release, so the task reads every `.changeset/*.md` tracked at `HEAD` and compares no base branch.
+- A fragment allows the break when a front matter line declares a package at a level that permits it.
+  Below 1.0, which is a tag with major 0, `minor` and `major` permit a break.
+  From 1.0, only `major` does.
+- A `VERSION` file that names a newer release also allows the break.
+  This covers the commit of a merged Version PR, which removes the fragments before the tag exists.
+  Below 1.0, a newer major or minor counts.
+  From 1.0, only a newer major counts.
+- A failure of the tool that reports no API breakage, such as a build error, fails the task, with or without a fragment.
+
 ## Template catalog
 
 `template.toml` holds `template:check`, `template:off` and `template:on`.

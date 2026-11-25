@@ -20,6 +20,7 @@ Each piece lives here once, and every repository that uses it pins one commit.
 | `.github/workflows/renovate.yml` | A reusable workflow that runs Renovate over the active repositories of one visibility, from the files in `renovate/` | [Renovate](docs/renovate.md) |
 | `.github/workflows/homebrew-bump.yml` | A reusable workflow that bumps a tap's cask to a release by a merged pull request; needs the secrets `CHANGESET_VERSION_APP_CLIENT_ID` and `CHANGESET_VERSION_APP_PRIVATE_KEY` | [Homebrew bump](docs/homebrew-bump.md) |
 | `tasks/rust.toml` | A mise task catalog with the standard Rust tasks | [Rust catalog](tasks/README.md#rust-catalog) |
+| `tasks/swift.toml` | A mise task catalog with the standard Swift tasks | [Swift catalog](tasks/README.md#swift-catalog) |
 | `tasks/template.toml` | A mise task catalog: `template:check`, `template:off` and `template:on` | [Template catalog](tasks/README.md#template-catalog) |
 | `policy/` | Rego rules that conftest runs over a repository's workflows | [Workflow policy](policy/README.md) |
 
