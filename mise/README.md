@@ -30,6 +30,7 @@ The job exchanges its OIDC token for a session token, so it grants `id-token: wr
 - The login goes in the replacement URL, which mise sends as HTTP Basic credentials.
   mise redacts it from its logs, and the action masks the key and the token in every log.
 - Every later step of the job can read both through `MISE_URL_REPLACEMENTS`.
+  A second rule there sends this organization's GHCR package reads to the mirror.
   The session token opens only the mirror's downloads and lasts only until it expires.
 - The action masks the mirror's address and host in every log, since it comes from a secret.
 - A job with no OIDC token, or with no `mirror-url`, downloads from GitHub, and the action logs a notice.
