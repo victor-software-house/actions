@@ -33,7 +33,7 @@ on:
         required: false
 
 # The caller passes the organization secrets RELEASE_MIRROR_URL and
-# RELEASE_MIRROR_CI_KEY, and the Verify job downloads its tools through the
+# RELEASE_MIRROR_CI_KEY, and both jobs download their tools through the
 # release mirror. `id-token: write` and `packages: write` are caller
 # contracts: the mise action exchanges the job's OIDC token for a session
 # token, Publish writes the packages, and GitHub refuses to start a called
@@ -61,7 +61,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install locked tools
-        uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
+        uses: victor-software-house/actions/mise@18f18e904a284783908a9837679c5cbf91e2f607 # main, 2026-11-25
         with:
           version: ${{ inputs.mise-version }}
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
@@ -79,6 +79,8 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
+      # The mise action's release mirror session token.
+      id-token: write
       packages: write
     steps:
       - name: Check out repository
@@ -86,10 +88,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Install locked tools
-        uses: victor-software-house/actions/mise@e9d17162e425fcb46cc4a14d899bd0112a80c46d # feat/mirror-key, 2026-11-11
+        uses: victor-software-house/actions/mise@18f18e904a284783908a9837679c5cbf91e2f607 # main, 2026-11-25
         with:
           version: ${{ inputs.mise-version }}
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
           mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
       - name: Publish the task groups
-        uses: victor-software-house/actions/publish-task-groups@c2cecf2f80fcf53bcfa1a1cfc664d0e3e2b0cccf # feat/mise-tasks-ci, 2026-11-25
+        uses: victor-software-house/actions/publish-task-groups@6164ad5c21147ebff12278cb94bf2317fee3049d # feat/mise-tasks-ci, 2026-11-25

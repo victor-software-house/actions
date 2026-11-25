@@ -38,7 +38,7 @@ For each directory directly under `root`, in name order:
 
 It fails when `root` has no group.
 It checks every group name against `^[a-z0-9]+([._-][a-z0-9]+)*$` first, and when any name fails, it lists them in one error and publishes nothing.
-It logs in to ghcr.io with the `token` input on stdin, and writes a table of the groups to the job summary.
+The `token` input logs in to ghcr.io on stdin, and a table of the groups goes to the job summary.
 
 ## Using a group
 
