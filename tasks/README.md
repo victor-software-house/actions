@@ -160,8 +160,10 @@ The toolchain on the `PATH` runs every task, and the including repository select
 
 - It picks the newest tag that matches `v<major>.<minor>.<patch>` exactly, the tags SwiftPM resolves versions from.
   With no such tag it prints a notice and passes.
-- It completes a shallow clone and fetches the tags first, because the baseline checkout and the merge-base need the history.
+- It completes a shallow clone with its tags first, because the baseline checkout and the merge-base need the history.
 - A breaking change fails the task unless a `.changeset/*.md` fragment that this change adds or edits declares a package as `minor` or `major`.
+  When `HEAD` is the base, as on a push to the default branch, every pending fragment counts.
+- A failure of the tool that reports no API breakage, such as a build error, fails the task, with or without a fragment.
 - The base of that comparison is the merge-base of `HEAD` and `origin/$GITHUB_BASE_REF`, else `origin/main`, else `origin/master`.
 
 ## Template catalog

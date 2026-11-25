@@ -35,7 +35,7 @@ paths=()
 for path in Package.swift Sources Tests; do
   [ -e "$path" ] && paths+=("$path")
 done
-if [ "${#paths[@]}" -eq 0 ]; then
+if [ -z "${paths[*]-}" ]; then
   echo "✘ none of Package.swift, Sources and Tests exists in $PWD" >&2
   exit 1
 fi
@@ -51,7 +51,7 @@ paths=()
 for path in Package.swift Sources Tests; do
   [ -e "$path" ] && paths+=("$path")
 done
-if [ "${#paths[@]}" -eq 0 ]; then
+if [ -z "${paths[*]-}" ]; then
   echo "✘ none of Package.swift, Sources and Tests exists in $PWD" >&2
   exit 1
 fi
@@ -72,6 +72,7 @@ shell = "bash -o pipefail -c"
 run = '''
 set -euo pipefail
 
+SWIFT_DOC_TARGETS="${SWIFT_DOC_TARGETS:-}"
 if [ -z "${SWIFT_DOC_TARGETS//[[:space:]]/}" ]; then
   echo "✘ SWIFT_DOC_TARGETS is unset or empty: set it to the module names to document, space-separated" >&2
   exit 1
@@ -101,7 +102,8 @@ for target in $SWIFT_DOC_TARGETS; do
   catalog=()
   [ -d "Sources/$target/$target.docc" ] && catalog=("Sources/$target/$target.docc")
   echo "Documenting $target"
-  "$docc" convert "${catalog[@]}" \
+  # ${catalog[@]+...} keeps an empty array from failing under set -u on bash 3.2.
+  "$docc" convert ${catalog[@]+"${catalog[@]}"} \
     --fallback-display-name "$target" \
     --fallback-bundle-identifier "$target" \
     --fallback-bundle-version 0 \
@@ -118,8 +120,11 @@ done
 # package as minor or major (the house rule sets a breaking change to a minor
 # fragment). The base is the merge-base of HEAD and origin/$GITHUB_BASE_REF,
 # else origin/main, else origin/master, as verctl picks its default branch.
-# A shallow clone is completed first, because the tags, the baseline checkout
-# and the merge-base need their history.
+# When HEAD is the base, as on a push to the default branch, every pending
+# fragment counts. A failure of the tool itself, with no API breakage reported,
+# fails the task whatever the fragments say.
+# A shallow clone is completed first, with its tags, because the baseline
+# checkout and the merge-base need their history.
 ["swift:api"]
 description = "Public API breakage against the newest v<major>.<minor>.<patch> tag"
 shell = "bash -o pipefail -c"
@@ -128,8 +133,6 @@ set -euo pipefail
 
 if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
   git fetch --quiet --unshallow --tags origin
-else
-  git fetch --quiet --tags origin
 fi
 
 tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
@@ -139,8 +142,16 @@ if [ -z "$tag" ]; then
 fi
 
 echo "Comparing the API with $tag"
-if swift package diagnose-api-breaking-changes "$tag"; then
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+if swift package diagnose-api-breaking-changes "$tag" 2>&1 | tee "$log"; then
   exit 0
+fi
+# The tool exits 1 for a breakage and for a failed build or comparison alike,
+# so only its own "API breakage:" diagnostic reaches the fragments below.
+if ! grep -q 'API breakage' "$log"; then
+  echo "✘ diagnose-api-breaking-changes failed without reporting an API breakage" >&2
+  exit 1
 fi
 
 base=""
@@ -156,16 +167,25 @@ if [ -z "$base" ]; then
   exit 1
 fi
 
-# The front matter of each fragment this change adds or edits: a line whose
-# value is minor or major, with the key quoted or not.
+# On the default branch HEAD is the base, so no fragment differs: every
+# pending fragment counts there. Elsewhere only the fragments this change adds
+# or edits count.
+if [ "$base" = "$(git rev-parse HEAD)" ]; then
+  fragments=$(git ls-files -- '.changeset/*.md')
+else
+  fragments=$(git diff --name-only --diff-filter=AM "$base" -- '.changeset/*.md')
+fi
+
+# The front matter of each fragment: a line whose value is minor or major,
+# with the key quoted or not.
 declared=$(
-  git diff --name-only --diff-filter=AM "$base" -- '.changeset/*.md' |
-    while read -r fragment; do
-      awk '
-        /^---[[:space:]]*$/ { fence++; next }
-        fence == 1 && /:[[:space:]]*"?(minor|major)"?[[:space:]]*$/ { print FILENAME ": " $0 }
-      ' "$fragment"
-    done
+  while read -r fragment; do
+    [ -n "$fragment" ] || continue
+    awk '
+      /^---[[:space:]]*$/ { fence++; next }
+      fence == 1 && /:[[:space:]]*"?(minor|major)"?[[:space:]]*$/ { print FILENAME ": " $0 }
+    ' "$fragment"
+  done <<< "$fragments"
 )
 if [ -n "$declared" ]; then
   echo "The breaking API changes since $tag are declared by:"
