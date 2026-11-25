@@ -152,6 +152,7 @@ The toolchain on the `PATH` runs every task, and the including repository select
   The task fails when it is unset or empty.
 - A target's catalog is `Sources/<target>/<target>.docc` when that folder exists.
   Without one, `docc` builds from the symbol graph alone.
+- It reads the symbol graph folder from the output of `swift package dump-symbol-graph`, since that folder moves with SwiftPM's build system.
 - `docc` comes from `xcrun --find docc` on macOS and from the `PATH` elsewhere.
 - Any `docc` warning fails the task, such as a symbol link that resolves to nothing.
 - The output goes to a temporary folder that the task deletes.
