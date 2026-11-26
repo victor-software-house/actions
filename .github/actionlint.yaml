@@ -1,5 +1,5 @@
-# jactionlint reads this file under actionlint's name. Without a profile it
-# applies its default profile and prints a note on every run.
+# jactionlint reads this file, as actionlint does. Without a profile, it
+# uses the default profile and prints a note on every run.
 profile: default
 paths:
   .github/workflows/rust-ci.yml:
@@ -20,7 +20,7 @@ paths:
       - '"\{\{env\.MISE_LOCK_HASH\}\}" is not an expression.+'
   mise/action.yml:
     ignore:
-      # The step refuses a mirror-url holding any character outside
+      # The step refuses a mirror-url with any character outside
       # A-Za-z0-9._~:/-, a newline included, before it writes GITHUB_ENV.
       - 'untrusted input from the variable MIRROR_URL \(inputs\.mirror-url\) is written to \$GITHUB_ENV.+'
   .github/workflows/renovate.yml:
