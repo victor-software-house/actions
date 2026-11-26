@@ -94,4 +94,4 @@ jobs:
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
           mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
       - name: Publish the task groups
-        uses: victor-software-house/actions/publish-task-groups@6164ad5c21147ebff12278cb94bf2317fee3049d # feat/mise-tasks-ci, 2026-11-25
+        uses: victor-software-house/actions/publish-task-groups@925f923f8d0d0daab912d32b330fa2fbf9b9c7c0 # fix/crane-from-path, 2026-11-25

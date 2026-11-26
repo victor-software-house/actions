@@ -19,8 +19,9 @@ steps:
     uses: victor-software-house/actions/publish-task-groups@<commit> # main, <date>
 ```
 
-The job needs mise on its path, and `jq` and GNU `tar`, which the Ubuntu runners have.
-The action runs crane through `mise x`.
+The job needs `jq` and GNU `tar`, which the Ubuntu runners have, and `crane` on its path.
+The repository declares `aqua:google/go-containerregistry` in its mise config, and the mise action installs it.
+It runs the `crane` it finds and fails with an error when there is none.
 
 ## Steps
 
@@ -60,7 +61,6 @@ mise extracts the layer into the include root, so `groups/specs/budget.sh` becom
 | `owner` | the repository's owner | The GHCR owner of the packages, lowercased by the script |
 | `source` | the repository's URL | The `org.opencontainers.image.source` label |
 | `token` | `github.token` | The token that logs in to ghcr.io; it needs `packages: write` |
-| `crane-version` | `0.22.1` | The crane release to run |
 
 ## Output
 

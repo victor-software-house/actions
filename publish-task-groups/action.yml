@@ -20,9 +20,6 @@ inputs:
   token:
     description: The token that logs in to ghcr.io, with packages write access
     default: ${{ github.token }}
-  crane-version:
-    description: The crane release to run through mise
-    default: 0.22.1
 
 outputs:
   groups:
@@ -43,5 +40,4 @@ runs:
         OWNER: ${{ inputs.owner }}
         SOURCE: ${{ inputs.source }}
         TOKEN: ${{ inputs.token }}
-        CRANE_VERSION: ${{ inputs.crane-version }}
       run: "$GITHUB_ACTION_PATH/publish.sh"

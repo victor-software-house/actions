@@ -12,10 +12,6 @@ namespace=${OWNER,,}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-crane() {
-  mise x "aqua:google/go-containerregistry@${CRANE_VERSION}" -- crane "$@"
-}
-
 login() {
   printf '%s' "$TOKEN" | crane auth login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 }
@@ -97,6 +93,10 @@ summary_row() {
 
 main() {
   local dirs=("$ROOT"/*/) dir name names=() entry groups='{}'
+  if ! command -v crane >/dev/null; then
+    echo "::error::crane is not on the path; declare aqua:google/go-containerregistry in the repository's mise config"
+    return 1
+  fi
   if ((${#dirs[@]} == 0)); then
     echo "::error::$ROOT has no group directory"
     return 1
