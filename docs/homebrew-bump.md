@@ -31,7 +31,7 @@ The caller contract:
 - The tap allows auto-merge in its settings, because the workflow enables it on the pull request.
 - The tap turns on automatically deleting head branches, because the CLI does not delete the branch of an auto-merged pull request.
 - The caller passes both secrets.
-- The caller's own concurrency group, if it has one, is not named `homebrew-bump-<name>`, after the cask or formula, which the workflow holds.
+- The caller's own concurrency group, if it has one, is not named `homebrew-bump-<key>`, which the workflow holds.
 
 The tap's default branch takes changes only through a pull request, and the workflow token may not open one.
 So the bump opens and merges its pull request as the App.
@@ -76,10 +76,10 @@ So the bump opens and merges its pull request as the App.
    A pull request that merged meanwhile fails to close, and the run leaves it with a notice.
 7. It fetches the default branch again and reads the file's version at its tip.
    It stops with a notice when the file is already at or past this version, as when an older bump merged since step 3.
-8. It commits on `bump/<name>-<version>`, built on that tip, as `github-actions[bot]`.
+8. It commits on `bump/<key>-<version>`, built on that tip, as `github-actions[bot]`.
    It rewrites the `version` line, then the sha256 of each asset, checks that each changed, and pushes the branch.
    A cask has one `sha256` line.
-   A formula names each asset in a `url` line that interpolates `#{version}`, and the first `sha256` line after that url is the asset's.
+   A formula names each asset in a `url` line that interpolates `#{version}`, and the first `sha256` line after that url, before any other url, is the asset's.
 9. It opens a pull request whose body links the release, unless the branch already has an open one.
    It then enables auto-merge with squash.
    The merge waits for the required checks, so the step does not fail while they run.
@@ -117,8 +117,9 @@ It orders `vX.Y.Z` tags correctly.
 A caller whose versions `sort -V` orders wrongly, such as `1.2-3` against `1.2`, must dispatch them in order.
 The workflow cannot tell a newer one from an older one.
 
-An open bump of the same cask or formula matches by its branch prefix `bump/<name>-` and its title prefix `<name>: bump to `.
-So a name that starts with another's is not mistaken for it.
+An open bump of the same cask or formula matches by its branch prefix `bump/<key>-` and its title prefix `<name>: bump to `.
+The key of a cask is its token, and the key of a formula is `formula-<name>`, so a cask and a formula of the same name never match each other.
+A name that starts with another's is not mistaken for it either.
 
 ## Concurrency
 

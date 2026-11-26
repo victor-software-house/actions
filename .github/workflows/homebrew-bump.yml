@@ -52,10 +52,12 @@ on:
 permissions:
   contents: read
 
-# One bump per cask or formula at a time, and a queued one waits. The group's prefix
+# One bump per cask or formula at a time, and a queued one waits. A formula's
+# group, branch and key carry a formula- prefix, so a cask and a formula of the
+# same name never share them. The group's prefix
 # keeps it apart from any group the caller names.
 concurrency:
-  group: homebrew-bump-${{ inputs.cask || inputs.formula }}
+  group: homebrew-bump-${{ inputs.cask || format('formula-{0}', inputs.formula) }}
   cancel-in-progress: false
 
 jobs:
@@ -84,6 +86,7 @@ jobs:
           fi
           if [[ -n $CASK ]]; then
             name=$CASK
+            key=$CASK
             file="Casks/${CASK}.rb"
             # A cask points at one asset.
             if [[ ! $ASSET =~ ^[^[:space:]]+$ ]]; then
@@ -92,6 +95,7 @@ jobs:
             fi
           else
             name=$FORMULA
+            key="formula-${FORMULA}"
             file="Formula/${FORMULA}.rb"
           fi
           if [[ ! $name =~ ^[a-z0-9][a-z0-9@._+-]*$ ]]; then
@@ -115,6 +119,7 @@ jobs:
             echo "version=${version}"
             echo "source-name=${SOURCE_REPOSITORY#*/}"
             echo "name=${name}"
+            echo "key=${key}"
             echo "file=${file}"
           } >> "$GITHUB_OUTPUT"
       # Two tokens, each with the least access its steps need: the tap's
@@ -149,6 +154,7 @@ jobs:
           SOURCE_TOKEN: ${{ steps.source-token.outputs.token }}
           VERSION: ${{ steps.target.outputs.version }}
           NAME: ${{ steps.target.outputs.name }}
+          KEY: ${{ steps.target.outputs.key }}
           FILE: ${{ steps.target.outputs.file }}
         run: |
           set -euo pipefail
@@ -184,7 +190,7 @@ jobs:
           # one's out of the match. An open pull request at this version is
           # this run's own, from an earlier attempt, and is reused below.
           open_bumps=$(gh pr list --state open --limit 100 --json number,headRefName,title \
-            | jq -r --arg prefix "bump/${NAME}-" --arg title "${NAME}: bump to " \
+            | jq -r --arg prefix "bump/${KEY}-" --arg title "${NAME}: bump to " \
               '.[] | select((.headRefName | startswith($prefix)) and (.title | startswith($title))) | "\(.number) \(.headRefName | ltrimstr($prefix))"')
           older=()
           while read -r number other; do
@@ -237,7 +243,7 @@ jobs:
             echo "::notice::${NAME} is at ${current} on the default branch, so ${VERSION} changes nothing."
             exit 0
           fi
-          branch="bump/${NAME}-${VERSION}"
+          branch="bump/${KEY}-${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git switch -C "$branch" "origin/${default}"
@@ -249,12 +255,12 @@ jobs:
             grep -qxF "  sha256 \"${sha}\"" "$file"
           else
             # A formula names each asset in a url line that interpolates
-            # #{version}, and the first sha256 line after that url is the
-            # asset's.
+            # #{version}, and the first sha256 line after that url, before any
+            # other url, is the asset's.
             for asset in "${assets[@]}"; do
               pattern=${asset//"$VERSION"/'#{version}'}
               awk -v name="$pattern" -v sha="${shas[$asset]}" '
-                $0 ~ /^[[:space:]]*url "/ && index($0, "/" name "\"") { found = 1; print; next }
+                $0 ~ /^[[:space:]]*url "/ { found = index($0, "/" name "\"") > 0; print; next }
                 found && $0 ~ /^[[:space:]]*sha256 "/ { sub(/sha256 "[^"]*"/, "sha256 \"" sha "\""); found = 0; done = 1 }
                 { print }
                 END { if (!done) exit 1 }
