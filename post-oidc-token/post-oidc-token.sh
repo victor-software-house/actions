@@ -6,6 +6,10 @@
 set -euo pipefail
 
 : "${URL:?post-oidc-token: the url input is empty}"
+if [[ $URL != https://* ]]; then
+  echo "::error::post-oidc-token: the url must start with https://, so the token never travels in plain text"
+  exit 1
+fi
 : "${ACTIONS_ID_TOKEN_REQUEST_URL:?post-oidc-token: the job needs the permission id-token: write}"
 
 # Prints a curl config line that sends $2 as an Authorization header of
