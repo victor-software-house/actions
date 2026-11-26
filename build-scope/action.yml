@@ -1,0 +1,53 @@
+name: build-scope
+description: >-
+  Decide whether a pull request or merge group changes anything the build
+  reads: a path outside the documentation, or a documentation file that a Go
+  or Swift source reads
+author: victor-software-house
+
+inputs:
+  go:
+    description: >-
+      "true" makes a documentation file a build input when a Go source names
+      its path, or a //go:embed line may embed it
+    default: "false"
+  swift:
+    description: >-
+      "true" makes a documentation file a build input when a Swift source
+      names its path
+    default: "false"
+
+outputs:
+  build:
+    description: '"true" when the build reads a changed path, else "false"'
+    value: ${{ steps.scope.outputs.build }}
+
+runs:
+  using: composite
+  steps:
+    # Documentation is the root's Markdown files, docs/, openspec/, the ledger
+    # and the changeset fragments.
+    - name: Detect changed paths
+      id: filter
+      uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      with:
+        list-files: json
+        filters: |
+          all:
+            - '**'
+          docs:
+            - '*.md'
+            - 'docs/**'
+            - 'openspec/**'
+            - 'tasks.yaml'
+            - '.changeset/*.md'
+    - name: Decide whether to build
+      id: scope
+      shell: bash
+      env:
+        ALL: ${{ steps.filter.outputs.all_count }}
+        DOCS: ${{ steps.filter.outputs.docs_count }}
+        DOCS_FILES: ${{ steps.filter.outputs.docs_files }}
+        GO: ${{ inputs.go }}
+        SWIFT: ${{ inputs.swift }}
+      run: '"$GITHUB_ACTION_PATH/build-scope.sh"'
