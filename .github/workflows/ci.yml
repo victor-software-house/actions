@@ -14,7 +14,7 @@ on:
 permissions:
   contents: read
 
-# The dev profile, which .miserc.toml loads locally, holds only the git hooks.
+# The dev profile, which .miserc.toml loads locally, has only the git hooks.
 env:
   MISE_ENV: ci
 
@@ -42,7 +42,7 @@ jobs:
       - name: Install locked tools
         uses: ./mise
         with:
-          version: 2026.11.6
+          version: 2026.11.12
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
           mirror-key: ${{ secrets.RELEASE_MIRROR_CI_KEY }}
       - name: Verify
