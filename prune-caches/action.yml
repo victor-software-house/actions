@@ -1,0 +1,23 @@
+name: prune-caches
+description: >-
+  Delete every cache entry of each key prefix on the run's ref, except the
+  newest
+author: victor-software-house
+
+inputs:
+  prefixes:
+    description: The cache key prefixes, separated by spaces
+    required: true
+  token:
+    description: A token that can delete this repository's caches
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Delete the superseded entries
+      shell: bash
+      env:
+        PREFIXES: ${{ inputs.prefixes }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: '"$GITHUB_ACTION_PATH/prune-caches.sh"'

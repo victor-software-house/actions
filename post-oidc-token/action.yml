@@ -1,0 +1,19 @@
+name: post-oidc-token
+description: >-
+  Post the job's OIDC token, with a URL as its audience, to that URL as a
+  bearer token, in up to five attempts
+author: victor-software-house
+
+inputs:
+  url:
+    description: The https URL that receives the token, which is also its audience
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Post the job's OIDC token
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+      run: '"$GITHUB_ACTION_PATH/post-oidc-token.sh"'
