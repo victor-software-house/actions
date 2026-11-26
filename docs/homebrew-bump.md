@@ -96,18 +96,24 @@ class Example < Formula
   version "0.0.1"
 
   on_macos do
-    url "https://github.com/victor-software-house/example/releases/download/v#{version}/example_#{version}_macos_arm64.tar.gz"
-    sha256 "…"
+    on_arm do
+      url "https://github.com/victor-software-house/example/releases/download/v#{version}/example_#{version}_macos_arm64.tar.gz"
+      sha256 "…"
+    end
   end
 
   on_linux do
-    url "https://github.com/victor-software-house/example/releases/download/v#{version}/example_#{version}_linux_x64.tar.gz"
-    sha256 "…"
+    on_intel do
+      url "https://github.com/victor-software-house/example/releases/download/v#{version}/example_#{version}_linux_x64.tar.gz"
+      sha256 "…"
+    end
   end
 end
 ```
 
 Its caller passes both asset names, one per line, and the workflow sets the sha256 under each url.
+`brew style` refuses a `url` directly under `on_macos` or `on_linux`, so each url sits under `on_arm` or `on_intel`.
+Two url lines may name the same asset, and the workflow sets the sha256 under each of them.
 
 ## Version order
 
