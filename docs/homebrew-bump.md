@@ -119,6 +119,7 @@ The workflow cannot tell a newer one from an older one.
 
 An open bump of the same cask or formula matches by its branch prefix `bump/<key>-` and its title prefix `<name>: bump to `.
 The key of a cask is its token, and the key of a formula is `formula-<name>`, so a cask and a formula of the same name never match each other.
+A cask token may not start with `formula-`, so no cask shares a formula's key.
 A name that starts with another's is not mistaken for it either.
 
 ## Concurrency

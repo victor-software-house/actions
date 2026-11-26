@@ -87,6 +87,11 @@ jobs:
           if [[ -n $CASK ]]; then
             name=$CASK
             key=$CASK
+            # A formula's key is formula-<name>, so no cask token may take that form.
+            if [[ $CASK == formula-* ]]; then
+              echo "::error::a cask token may not start with formula- (got '${CASK}')"
+              exit 1
+            fi
             file="Casks/${CASK}.rb"
             # A cask points at one asset.
             if [[ ! $ASSET =~ ^[^[:space:]]+$ ]]; then
