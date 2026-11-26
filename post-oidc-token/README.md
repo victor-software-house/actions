@@ -26,6 +26,8 @@ deploy:
 
 - Each attempt requests a new token, because an endpoint that rejects a replayed token refuses the old one.
 - The step makes up to five attempts, ten seconds apart, and fails after the fifth.
+- A failed POST is retried even after a timeout, when the endpoint may have acted.
+  The endpoint must therefore accept the same request twice, also while the first one is still running.
 - Each attempt that fails prints whether GitHub gave no token, the answer held none, or the endpoint refused.
 - The token is masked in the log before it is sent.
 

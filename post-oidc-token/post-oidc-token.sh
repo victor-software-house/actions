@@ -2,7 +2,9 @@
 # Posts the job's OIDC token to URL as a bearer token, with URL as the token's
 # audience. The endpoint checks the token's signature, issuer, audience and
 # subject, and rejects a token it has seen, so each attempt takes a new one.
-# Five attempts, ten seconds apart.
+# Five attempts, ten seconds apart. A failed POST is retried even after a
+# timeout, when the endpoint may have acted, so the endpoint must accept the
+# same request twice, also while the first is still running.
 set -euo pipefail
 
 : "${URL:?post-oidc-token: the url input is empty}"
