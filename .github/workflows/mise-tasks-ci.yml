@@ -61,7 +61,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install locked tools
-        uses: victor-software-house/actions/mise@18f18e904a284783908a9837679c5cbf91e2f607 # main, 2026-11-25
+        uses: victor-software-house/actions/mise@709f38b9fd8a10a921917308bb8abe921182ce26 # main, 2026-11-26
         with:
           version: ${{ inputs.mise-version }}
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
@@ -88,7 +88,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install locked tools
-        uses: victor-software-house/actions/mise@18f18e904a284783908a9837679c5cbf91e2f607 # main, 2026-11-25
+        uses: victor-software-house/actions/mise@709f38b9fd8a10a921917308bb8abe921182ce26 # main, 2026-11-26
         with:
           version: ${{ inputs.mise-version }}
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}

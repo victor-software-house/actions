@@ -124,7 +124,7 @@ jobs:
           permission-contents: read
 
       - name: Install tools
-        uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
+        uses: victor-software-house/actions/mise@709f38b9fd8a10a921917308bb8abe921182ce26 # main, 2026-11-26
         with:
           version: ${{ inputs.mise-version }}
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
@@ -220,7 +220,7 @@ jobs:
           permission-contents: read
 
       - name: Install tools
-        uses: victor-software-house/actions/mise@6243d0aec17b8d3eb664b6cf5162bfb5ef7990c3 # main, 2026-11-18
+        uses: victor-software-house/actions/mise@709f38b9fd8a10a921917308bb8abe921182ce26 # main, 2026-11-26
         with:
           version: ${{ inputs.mise-version }}
           mirror-url: ${{ secrets.RELEASE_MIRROR_URL }}
